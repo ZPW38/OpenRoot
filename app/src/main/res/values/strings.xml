@@ -1,0 +1,35 @@
+<resources>
+    <string name="app_name">OpenRoot</string>
+
+    <!-- Wireless debugging pairing -->
+    <string name="adb_pairing_channel_name">Wireless pairing</string>
+    <string name="adb_pairing_channel_description">Wireless debugging pairing</string>
+
+    <string name="adb_pairing_searching_title">Waiting for pairing request</string>
+    <string name="adb_pairing_searching_text">Open "Pair device with pairing code" in Developer options</string>
+
+    <string name="adb_pairing_found_title">Pairing request found</string>
+    <string name="adb_pairing_found_text">Tap to enter the 6-digit code</string>
+    <string name="adb_pairing_code_hint">Pairing code</string>
+    <string name="adb_pairing_input_code">Enter code</string>
+
+    <string name="adb_pairing_working_title">Pairing…</string>
+    <string name="adb_pairing_working_text">Port %1$d</string>
+
+    <string name="adb_pairing_succeed_title">Paired</string>
+    <string name="adb_pairing_succeed_text">Key added to adbd</string>
+
+    <string name="adb_pairing_failed_title">Pairing failed</string>
+    <string name="adb_pairing_failed_code">Wrong or expired pairing code</string>
+    <string name="adb_pairing_failed_empty_code">No pairing code entered</string>
+    <string name="adb_pairing_failed_port">Cannot reach the pairing port, reopen the pairing dialog</string>
+    <string name="adb_pairing_failed_tls">TLS handshake failed</string>
+
+    <string name="adb_pairing_retry">Retry</string>
+    <string name="adb_pairing_stop">Stop</string>
+
+    <!-- Main screen -->
+    <string name="adb_pairing_start">Start pairing</string>
+    <string name="adb_pairing_stop_button">Stop pairing</string>
+    <string name="adb_pairing_permission_needed">Notification permission required</string>
+</resources>

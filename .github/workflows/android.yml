@@ -1,0 +1,71 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    # 1. 获取北京时间日期并设置为环境变量
+    - name: Set version and date
+      run: |
+        DATE=$(TZ='Asia/Shanghai' date +'%Y%m%d')
+        echo "DATE=$DATE" >> $GITHUB_ENV
+        echo "VERSION=v$DATE" >> $GITHUB_ENV
+
+    # 2. 构建 Release APK（未签名）
+    - name: Build Release APK
+      run: ./gradlew assembleRelease
+
+    # 3. 使用 r0adkll/sign-android-release 对 APK 签名
+    - name: Sign APK
+      id: sign_app
+      uses: r0adkll/sign-android-release@v1
+      with:
+        releaseDirectory: app/build/outputs/apk/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+      env:
+        BUILD_TOOLS_VERSION: "34.0.0"
+
+    # 4. 将签名后的 APK 重命名为 v年月日.apk
+    - name: Rename APK
+      run: |
+        mv ${{ steps.sign_app.outputs.signedReleaseFile }} app/build/outputs/apk/release/$VERSION.apk
+        echo "重命名完成，当前文件列表:"
+        ls -la app/build/outputs/apk/release/
+
+    # 5. 创建 GitHub Release 并上传已签名的 APK
+    - name: Create GitHub Release and Upload Assets
+      if: github.event_name == 'push'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ env.VERSION }}
+        name: ${{ env.VERSION }}
+        generate_release_notes: true
+        files: |
+          app/build/outputs/apk/release/${{ env.VERSION }}.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
