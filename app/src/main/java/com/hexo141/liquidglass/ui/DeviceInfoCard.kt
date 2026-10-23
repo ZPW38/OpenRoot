@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hexo141.liquidglass.device.DeviceInfo
@@ -86,19 +87,35 @@ fun DeviceInfoCards(
                     .fillMaxHeight()
             )
         }
+        Row(
+            modifier = Modifier.height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            InfoTile(
+                label = "Android",
+                value = info.androidVersion,
+                backdrop = backdrop,
+                surfaceColor = surfaceColor,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            )
+            InfoTile(
+                label = "SELinux",
+                value = info.selinux,
+                backdrop = backdrop,
+                surfaceColor = surfaceColor,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            )
+        }
         InfoTile(
             label = "Kernel",
             value = info.kernel,
             backdrop = backdrop,
             surfaceColor = surfaceColor,
             monospace = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        InfoTile(
-            label = "SELinux",
-            value = info.selinux,
-            backdrop = backdrop,
-            surfaceColor = surfaceColor,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -127,29 +144,31 @@ private fun InfoTile(
                     if (surfaceColor.isSpecified) {
                         drawRect(surfaceColor)
                     }
-                    // Faint sheen on top of the refracted wallpaper.
-                    drawRect(Color.White.copy(alpha = 0.06f))
+                    // 壁纸很亮时纯折射会看不清字，压一层很淡的暗色再叠高光
+                    drawRect(Color.Black.copy(alpha = 0.12f))
+                    drawRect(Color.White.copy(alpha = 0.08f))
                 }
             )
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+        // 大号标签 + 小号取值，和系统设置里的分组标题一个观感
         BasicText(
-            text = label.uppercase(),
+            text = label,
             style = TextStyle(
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 10.sp,
-                letterSpacing = 1.4.sp,
+                color = Color.White.copy(alpha = 0.95f),
+                fontSize = 19.sp,
+                fontWeight = FontWeight.SemiBold,
                 shadow = textShadow
             )
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         BasicText(
             text = value,
             style = TextStyle(
-                color = Color.White.copy(alpha = 0.95f),
-                fontSize = if (monospace) 12.sp else 14.sp,
+                color = Color.White.copy(alpha = 0.62f),
+                fontSize = if (monospace) 11.sp else 12.sp,
                 fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
-                lineHeight = if (monospace) 17.sp else 19.sp,
+                lineHeight = if (monospace) 15.sp else 16.sp,
                 shadow = textShadow
             )
         )

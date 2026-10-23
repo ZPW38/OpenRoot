@@ -120,6 +120,16 @@ public class AdbStream implements Closeable {
     }
 
     /**
+     * Whether the daemon already answered our OPEN with OKAY.
+     *
+     * <p>Checked before waiting in {@code AdbConnection.open}: the OKAY can arrive before the
+     * opener starts waiting, and that notify would otherwise be lost.
+     */
+    boolean isWriteReady() {
+        return mWriteReady.get();
+    }
+
+    /**
      * Called by the connection thread to notify that the stream was closed by the peer.
      */
     void notifyClose(boolean closedByPeer) {

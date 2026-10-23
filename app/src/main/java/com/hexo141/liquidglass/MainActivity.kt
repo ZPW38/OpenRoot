@@ -22,6 +22,7 @@ import com.hexo141.liquidglass.adb.AdbKeyManager
 import com.hexo141.liquidglass.adb.AdbPairingService
 import com.hexo141.liquidglass.adb.PairingState
 import com.hexo141.liquidglass.device.DeviceInfo
+import com.hexo141.liquidglass.root.RootExploit
 import com.hexo141.liquidglass.ui.PairingScreen
 
 class MainActivity : AppCompatActivity() {
@@ -50,6 +51,18 @@ class MainActivity : AppCompatActivity() {
 
     /** 设备信息：先用本机属性铺底，连上 adbd 后再换成 ADB 查询到的值 */
     private val deviceInfo = mutableStateOf<DeviceInfo?>(null)
+
+    /** 当前连接的内核是否有随包的内核 profile */
+    private val supported = mutableStateOf(false)
+
+    /** 临时 root 载荷正在运行 */
+    private val exploiting = mutableStateOf(false)
+
+    /** 载荷的实时输出 */
+    private val exploitLog = mutableStateOf<List<String>>(emptyList())
+
+    /** 载荷结束后的结果行 */
+    private val exploitStatus = mutableStateOf<String?>(null)
 
     /** 每次进入前台只自动直连一次，避免失败后反复重试 */
     private var autoConnectTried = false
@@ -86,8 +99,13 @@ class MainActivity : AppCompatActivity() {
                 connecting = connecting.value,
                 connected = connected.value,
                 needsPairing = needsPairing.value,
+                supported = supported.value,
                 deviceInfo = deviceInfo.value,
-                onToggle = ::onPrimaryAction
+                exploiting = exploiting.value,
+                exploitLog = exploitLog.value,
+                exploitStatus = exploitStatus.value,
+                onToggle = ::onPrimaryAction,
+                onExploit = ::runExploit
             )
         }
 
@@ -118,6 +136,7 @@ class MainActivity : AppCompatActivity() {
         pairingRunning.value = AdbPairingService.isRunning()
         paired.value = PairingState(this).isPaired
         connected.value = AdbConnectionManager.isConnected()
+        if (!connected.value) supported.value = false
         loadDeviceInfo()
     }
 
@@ -177,7 +196,14 @@ class MainActivity : AppCompatActivity() {
             val info = runCatching { DeviceInfo.fromAdb(AdbConnectionManager.get(this)) }
                 .onFailure { Log.w(TAG, "cannot read device info over adb", it) }
                 .getOrNull()
-            if (info != null) runOnUiThread { deviceInfo.value = info }
+            if (info != null) {
+                Log.i(TAG, "device info from adb: $info")
+                val isSupported = RootExploit.hasProfile(this, info.kernel)
+                runOnUiThread {
+                    deviceInfo.value = info
+                    supported.value = isSupported
+                }
+            }
         }, "adb-device-info").start()
     }
 
@@ -187,6 +213,47 @@ class MainActivity : AppCompatActivity() {
             connecting.value -> Unit // already busy
             else -> requestStart()
         }
+    }
+
+    /**
+     * 跑临时 root：载荷通过 ADB 推到 /data/local/tmp 后以 shell 身份执行，
+     * 输出实时回显在玻璃日志卡里。
+     */
+    private fun runExploit() {
+        if (exploiting.value) return
+        if (!connected.value) {
+            toast(R.string.exploit_needs_adb)
+            return
+        }
+        val release = deviceInfo.value?.kernel.orEmpty()
+        if (!RootExploit.hasProfile(this, release)) {
+            toast(R.string.exploit_unsupported_kernel)
+            return
+        }
+
+        exploiting.value = true
+        exploitLog.value = emptyList()
+        exploitStatus.value = null
+        Thread({
+            val outcome = runCatching {
+                RootExploit.run(this, AdbConnectionManager.get(this), release) { line ->
+                    runOnUiThread { exploitLog.value = (exploitLog.value + line).takeLast(300) }
+                }
+            }
+            runOnUiThread {
+                exploiting.value = false
+                exploitStatus.value = outcome.fold(
+                    onSuccess = { code ->
+                        if (code == 0) getString(R.string.exploit_finished)
+                        else getString(R.string.exploit_exit_code, code)
+                    },
+                    onFailure = { error ->
+                        Log.w(TAG, "exploit failed", error)
+                        error.message ?: error.javaClass.simpleName
+                    }
+                )
+            }
+        }, "root-exploit").start()
     }
 
     /** Debug-only hook so an ADB-driven smoke test can run a pairing attempt with a known code. */

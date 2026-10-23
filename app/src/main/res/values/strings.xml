@@ -39,4 +39,12 @@
     <string name="adb_connect_connecting">Connecting…</string>
     <string name="adb_disconnect">Disconnect</string>
     <string name="adb_connect_failed_fallback">Direct connection failed, pair with a code</string>
+
+    <!-- Temporary root -->
+    <string name="exploit_button">Exploit</string>
+    <string name="exploit_running">Exploiting…</string>
+    <string name="exploit_needs_adb">Connect to ADB first</string>
+    <string name="exploit_unsupported_kernel">No profile bundled for this kernel</string>
+    <string name="exploit_finished">Payload finished</string>
+    <string name="exploit_exit_code">Payload exited with code %1$d</string>
 </resources>

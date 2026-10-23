@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -39,6 +41,70 @@ android {
             useLegacyPackaging = true
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Temporary root: build the arm64 exploit payload from native/ with the NDK and
+// drop it into jniLibs so it is extracted into nativeLibraryDir at install time.
+// ---------------------------------------------------------------------------
+
+/** NDK location: local.properties -> ANDROID_NDK_HOME -> NDK_ROOT -> D:\android-ndk-r27d. */
+fun resolveNdkDir(): String {
+    val properties = Properties()
+    val propertiesFile = rootProject.file("local.properties")
+    if (propertiesFile.isFile) propertiesFile.inputStream().use(properties::load)
+    return sequenceOf(
+        properties.getProperty("ndk.dir"),
+        System.getenv("ANDROID_NDK_HOME"),
+        System.getenv("NDK_ROOT"),
+        "D:/android-ndk-r27d",
+    ).firstOrNull { !it.isNullOrBlank() }!!
+}
+
+val ndkDir: String = resolveNdkDir()
+val ndkPrebuilt: String = when {
+    System.getProperty("os.name").lowercase().contains("win") -> "windows-x86_64"
+    System.getProperty("os.name").lowercase().contains("mac") -> "darwin-x86_64"
+    else -> "linux-x86_64"
+}
+val ndkBinDir: File = File(ndkDir, "toolchains/llvm/prebuilt/$ndkPrebuilt/bin")
+val ndkMake: String = File(ndkDir, "prebuilt/$ndkPrebuilt/bin/${if (ndkPrebuilt == "windows-x86_64") "make.exe" else "make"}").absolutePath
+val ndkStrip: String = File(ndkBinDir, if (ndkPrebuilt == "windows-x86_64") "llvm-strip.exe" else "llvm-strip").absolutePath
+
+val nativeSourceDir = rootProject.layout.projectDirectory.dir("native")
+val nativeBinary = rootProject.layout.buildDirectory.file("native/ghostlock")
+val packagedPayload = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libghostlock.so")
+
+val buildNativeExploit = tasks.register<Exec>("buildNativeExploit") {
+    group = "build"
+    description = "Compiles the arm64 exploit payload with the NDK"
+    workingDir = nativeSourceDir.asFile
+    commandLine(ndkMake, "ghostlock", "-j4")
+    environment("NDK_ROOT", ndkDir)
+    inputs.dir(nativeSourceDir.dir("core"))
+    inputs.file(nativeSourceDir.file("Makefile"))
+    outputs.file(nativeBinary)
+}
+
+val prepareNativeExploit = tasks.register<Copy>("prepareNativeExploit") {
+    group = "build"
+    description = "Copies the exploit payload into jniLibs"
+    dependsOn(buildNativeExploit)
+    from(nativeBinary)
+    into(layout.projectDirectory.dir("src/main/jniLibs/arm64-v8a"))
+    rename { "libghostlock.so" }
+}
+
+val stripNativeExploit = tasks.register<Exec>("stripNativeExploit") {
+    group = "build"
+    description = "Strips the packaged exploit payload"
+    dependsOn(prepareNativeExploit)
+    commandLine(ndkStrip, "--strip-all", packagedPayload.asFile.absolutePath)
+    inputs.file(packagedPayload)
+}
+
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
+    dependsOn(stripNativeExploit)
 }
 
 dependencies {

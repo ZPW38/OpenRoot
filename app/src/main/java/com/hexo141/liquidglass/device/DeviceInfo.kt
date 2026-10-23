@@ -19,37 +19,49 @@ import java.io.File
 data class DeviceInfo(
     val deviceName: String,
     val chipset: String,
+    val androidVersion: String,
     val kernel: String,
     val selinux: String,
 ) {
     companion object {
         private const val UNKNOWN = "Unknown"
 
-        /** Props are queried in one shell round trip; order matters when parsing the output. */
-        private val COMMANDS = listOf(
+        /**
+         * One shell round trip with a marker before every query: `getprop <missing>` prints
+         * nothing at all, so markers keep the fields aligned no matter which prop is absent.
+         */
+        private const val MARKER = "@@"
+
+        private val QUERIES = listOf(
             "getprop ro.product.manufacturer",
             "getprop ro.product.model",
             "getprop ro.soc.manufacturer",
             "getprop ro.soc.model",
             "getprop ro.board.platform",
             "getprop ro.hardware",
+            "getprop ro.build.version.release",
+            "getprop ro.build.version.sdk",
             "uname -r",
             "getenforce",
         )
+
+        private val COMMAND: String =
+            QUERIES.joinToString("; ") { "echo '$MARKER'; $it" }
 
         // ---------------------------------------------------------------- over ADB
 
         @Throws(Exception::class)
         fun fromAdb(manager: AbsAdbConnectionManager): DeviceInfo {
-            val output = AdbShell.exec(manager, COMMANDS.joinToString("; "))
-            val lines = output.split('\n').map { it.trim() }
-            fun line(index: Int): String = lines.getOrNull(index).orEmpty()
+            val output = AdbShell.exec(manager, COMMAND)
+            val fields = output.split(MARKER).map { it.trim() }
+            fun field(index: Int): String = fields.getOrNull(index).orEmpty()
 
             return DeviceInfo(
-                deviceName = deviceName(line(0), line(1)),
-                chipset = chipset(line(2), line(3), line(4), line(5)),
-                kernel = line(6).ifEmpty { UNKNOWN },
-                selinux = line(7).ifEmpty { UNKNOWN },
+                deviceName = deviceName(field(1), field(2)),
+                chipset = chipset(field(3), field(4), field(5), field(6)),
+                androidVersion = androidVersion(field(7), field(8)),
+                kernel = field(9).ifEmpty { UNKNOWN },
+                selinux = field(10).ifEmpty { UNKNOWN },
             )
         }
 
@@ -77,6 +89,7 @@ data class DeviceInfo(
                 deviceName = customName.ifEmpty { deviceName(manufacturer, model) },
                 chipset = chipset(socManufacturer, socModel,
                     Build.BOARD?.trim().orEmpty(), Build.HARDWARE?.trim().orEmpty()),
+                androidVersion = androidVersion(Build.VERSION.RELEASE, Build.VERSION.SDK_INT.toString()),
                 kernel = System.getProperty("os.version")?.trim().orEmpty().ifEmpty { UNKNOWN },
                 selinux = localSelinux(),
             )
@@ -96,6 +109,18 @@ data class DeviceInfo(
         }
 
         // ---------------------------------------------------------------- helpers
+
+        /** e.g. "Android 15 (API 35)". */
+        private fun androidVersion(release: String, sdk: String): String {
+            val version = release.trim()
+            val api = sdk.trim()
+            return when {
+                version.isEmpty() && api.isEmpty() -> UNKNOWN
+                version.isEmpty() -> "API $api"
+                api.isEmpty() -> "Android $version"
+                else -> "Android $version (API $api)"
+            }
+        }
 
         private fun deviceName(manufacturer: String, model: String): String = when {
             model.isEmpty() -> UNKNOWN

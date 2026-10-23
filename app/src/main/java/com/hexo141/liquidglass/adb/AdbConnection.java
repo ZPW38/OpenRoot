@@ -511,9 +511,12 @@ public class AdbConnection implements Closeable {
         // Send OPEN
         sendPacket(AdbProtocol.generateOpen(localId, Objects.requireNonNull(destination)));
 
-        // Wait for the connection thread to receive the OKAY
+        // Wait for the connection thread to receive the OKAY. The flag is checked in a loop so an
+        // OKAY that arrives before this thread starts waiting is not missed.
         synchronized (stream) {
-            stream.wait();
+            while (!stream.isWriteReady() && !stream.isClosed()) {
+                stream.wait();
+            }
         }
 
         // Check if the OPEN request was rejected
