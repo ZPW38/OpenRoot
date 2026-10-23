@@ -35,6 +35,11 @@
 该依赖同时拉入 Jetbrains Compose 多平台构件（Android 变体映射到 `androidx.compose.*` 1.10.x）
 与 `io.github.kyant0:shapes`，均来自 Maven Central（阿里云镜像）。
 
+## 内置壁纸
+
+`app/src/main/res/drawable-nodpi/bg.jpg` 由项目使用者提供（来自本地下载文件，
+原图 2160×3840，并入时重采样到 1080×1920）。其版权/许可由提供者负责，本项目不重新授权。
+
 ## 参考但未复制
 
 `RikkaApps/Shizuku` 的 `manager/src/main/jni/adb_pairing.cpp` 使用 BoringSSL 的 SPAKE2 实现

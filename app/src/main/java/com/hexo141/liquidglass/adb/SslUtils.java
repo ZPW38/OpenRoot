@@ -4,8 +4,10 @@ package com.hexo141.liquidglass.adb;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.net.Socket;
 import java.security.KeyManagementException;
@@ -22,39 +24,109 @@ import javax.net.ssl.X509ExtendedKeyManager;
 import javax.net.ssl.X509TrustManager;
 
 final class SslUtils {
-    private static boolean customConscrypt = false;
+    private static final String TAG = "SslUtils";
+
+    private static final String TLS_VERSION = "TLSv1.3";
+
+    /** Provider shipped with this app (conscrypt-android). */
+    private static final String BUNDLED_PROVIDER = "org.conscrypt.OpenSSLProvider";
+
+    /** Context for the ADB transport: the platform stack is the historical default here. */
     private static SSLContext sslContext;
 
-    public static boolean isCustomConscrypt() {
-        return customConscrypt;
+    /** Context for pairing: must be able to export keying material, see {@link #getPairingSslContext}. */
+    private static SSLContext pairingSslContext;
+
+    private SslUtils() {
     }
 
-    @SuppressLint("TrulyRandom") // The users are already instructed to fix this issue
+    /**
+     * Context used for the TLS upgrade of the ADB transport itself (no keying material needed).
+     * Pairing must use {@link #getPairingSslContext} instead, because only that context can export
+     * the session keys.
+     */
     @NonNull
     public static SSLContext getSslContext(KeyPair keyPair) throws NoSuchAlgorithmException, KeyManagementException {
-        if (sslContext != null) {
-            return sslContext;
+        if (sslContext == null) {
+            sslContext = create(keyPair, false);
         }
-        try {
-            Class<?> providerClass = Class.forName("org.conscrypt.OpenSSLProvider");
-            Provider openSslProvder = (Provider) providerClass.getDeclaredConstructor().newInstance();
-            sslContext = SSLContext.getInstance("TLSv1.3", openSslProvder);
-            customConscrypt = true;
-        } catch (NoSuchAlgorithmException e) {
-            throw e;
-        } catch (Throwable e) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                // Custom error message to inform user that they should use custom Conscrypt library.
-                throw new NoSuchAlgorithmException("TLSv1.3 isn't supported on your platform. Use custom Conscrypt library instead.");
-            }
-            sslContext = SSLContext.getInstance("TLSv1.3");
-            customConscrypt = false;
+        return sslContext;
+    }
+
+    /**
+     * Context used for pairing.
+     *
+     * <p>Pairing needs {@code exportKeyingMaterial("adb-label\0")} from the finished TLS session.
+     * The platform Conscrypt method is a hidden API and is denied to apps since Android 10
+     * ("Accessing hidden method ... blocked, reflection, denied"), so the exporter has to come from
+     * the Conscrypt copy bundled in this app. The socket is created from that same provider, which
+     * makes it an {@code org.conscrypt} socket: the exporter can then be called directly, without
+     * reflection and without touching any platform internals.
+     */
+    @NonNull
+    public static SSLContext getPairingSslContext(KeyPair keyPair)
+            throws NoSuchAlgorithmException, KeyManagementException {
+        if (pairingSslContext == null) {
+            pairingSslContext = create(keyPair, true);
         }
-        System.out.println("Using " + (customConscrypt ? "custom" : "default") + " TLSv1.3 provider...");
-        sslContext.init(new KeyManager[]{getKeyManager(keyPair)},
+        return pairingSslContext;
+    }
+
+    @NonNull
+    private static SSLContext create(KeyPair keyPair, boolean preferBundled)
+            throws NoSuchAlgorithmException, KeyManagementException {
+        SSLContext context = preferBundled ? createBundled() : createPlatform();
+        if (context == null) {
+            context = preferBundled ? createPlatform() : createBundled();
+        }
+        if (context == null) {
+            throw new NoSuchAlgorithmException(
+                    "TLSv1.3 isn't supported on your platform. Use custom Conscrypt library instead.");
+        }
+
+        Log.i(TAG, "using " + describe(context) + " for TLSv1.3");
+
+        context.init(new KeyManager[]{getKeyManager(keyPair)},
                 new X509TrustManager[]{getAllAcceptingTrustManager()},
                 new SecureRandom());
-        return sslContext;
+        return context;
+    }
+
+    @Nullable
+    private static SSLContext createBundled() {
+        try {
+            Class<?> providerClass = Class.forName(BUNDLED_PROVIDER);
+            Provider provider = (Provider) providerClass.getDeclaredConstructor().newInstance();
+            return SSLContext.getInstance(TLS_VERSION, provider);
+        } catch (Throwable e) {
+            // Native libraries missing for this ABI, 16KB page mismatch, ...
+            Log.w(TAG, "bundled Conscrypt is unusable", e);
+            return null;
+        }
+    }
+
+    @Nullable
+    private static SSLContext createPlatform() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return null;
+        }
+        try {
+            return SSLContext.getInstance(TLS_VERSION);
+        } catch (Throwable e) {
+            Log.w(TAG, "platform TLSv1.3 is unavailable", e);
+            return null;
+        }
+    }
+
+    /** {@code true} when the context comes from the Conscrypt copy bundled in this app. */
+    static boolean isBundled(@NonNull SSLContext context) {
+        return context.getProvider().getClass().getName().startsWith("org.conscrypt.");
+    }
+
+    @NonNull
+    private static String describe(@NonNull SSLContext context) {
+        return (isBundled(context) ? "bundled" : "platform") + " TLSv1.3 provider ("
+                + context.getProvider().getClass().getName() + ")";
     }
 
     @NonNull

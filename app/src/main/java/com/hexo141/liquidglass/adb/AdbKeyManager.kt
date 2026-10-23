@@ -36,6 +36,15 @@ class AdbKeyManager(context: Context) {
 
         /** Certificate validity end (2031-12-31), matching the usual Android self-signed cert. */
         private const val NOT_AFTER_MILLIS = 1956528000_000L
+
+        /**
+         * Whether a key pair was generated before (i.e. a pairing was attempted at least once).
+         * Used to try a silent direct connection after the "paired" flag was introduced.
+         */
+        fun hasStoredKey(context: Context): Boolean =
+            context.applicationContext
+                .getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_PRIVATE, null) != null
     }
 
     private val preferences = context.applicationContext

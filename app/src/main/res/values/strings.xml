@@ -24,6 +24,7 @@
     <string name="adb_pairing_failed_empty_code">No pairing code entered</string>
     <string name="adb_pairing_failed_port">Cannot reach the pairing port, reopen the pairing dialog</string>
     <string name="adb_pairing_failed_tls">TLS handshake failed</string>
+    <string name="adb_pairing_failed_tls_export">Cannot export the TLS session keys, the bundled TLS library failed to load</string>
 
     <string name="adb_pairing_retry">Retry</string>
     <string name="adb_pairing_stop">Stop</string>
@@ -32,4 +33,10 @@
     <string name="adb_pairing_start">Start pairing</string>
     <string name="adb_pairing_stop_button">Stop pairing</string>
     <string name="adb_pairing_permission_needed">Notification permission required</string>
+
+    <!-- Already paired: connect without a code, fall back to pairing on failure -->
+    <string name="adb_connect">Connect</string>
+    <string name="adb_connect_connecting">Connecting…</string>
+    <string name="adb_disconnect">Disconnect</string>
+    <string name="adb_connect_failed_fallback">Direct connection failed, pair with a code</string>
 </resources>

@@ -9,6 +9,7 @@ import android.app.RemoteInput
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
@@ -61,6 +62,13 @@ class AdbPairingService : Service() {
         private const val ACTION_REPLY = "com.hexo141.liquidglass.action.PAIRING_REPLY"
         private const val ACTION_RETRY = "com.hexo141.liquidglass.action.PAIRING_RETRY"
 
+        /** Debug builds only: pair with an externally supplied code (used by adb-driven smoke tests). */
+        private const val ACTION_DEBUG_PAIR = "com.hexo141.liquidglass.action.DEBUG_PAIR"
+
+        const val EXTRA_DEBUG_CODE = "debug_pair_code"
+        const val EXTRA_DEBUG_PORT = "debug_pair_port"
+        const val EXTRA_DEBUG_HOST = "debug_pair_host"
+
         @Volatile
         private var running = false
 
@@ -78,6 +86,20 @@ class AdbPairingService : Service() {
             val intent = Intent(context, AdbPairingService::class.java).setAction(ACTION_STOP)
             startService(context, intent)
         }
+
+        /** Debug builds only: run a pairing attempt with an explicit code and port. */
+        fun debugPair(context: Context, code: String, port: Int, host: String?) {
+            if (!isDebuggable(context)) return
+            val intent = Intent(context, AdbPairingService::class.java)
+                .setAction(ACTION_DEBUG_PAIR)
+                .putExtra(EXTRA_PORT, port)
+                .putExtra(EXTRA_DEBUG_CODE, code)
+                .putExtra(EXTRA_DEBUG_HOST, host)
+            startService(context, intent)
+        }
+
+        private fun isDebuggable(context: Context): Boolean =
+            (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
         private fun startService(context: Context, intent: Intent) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -105,13 +127,15 @@ class AdbPairingService : Service() {
     private var adbMdns: AdbMdns? = null
     private var searching = false
     private var lastPort = -1
+    private var lastHost: String? = null
     private var lastPromptPort = -1
     private var pairing = false
 
-    private val discoveredListener = AdbMdns.OnAdbDaemonDiscoveredListener { _, port ->
-        Log.i(TAG, "pairing service port changed: $port")
+    private val discoveredListener = AdbMdns.OnAdbDaemonDiscoveredListener { address, port ->
+        Log.i(TAG, "pairing service port changed: $port (host=$address)")
         if (port <= 0) return@OnAdbDaemonDiscoveredListener
         lastPort = port
+        lastHost = address?.hostAddress
         // A new port means the pairing dialog was opened again. A re-resolve of the same port must
         // not replace whatever the user is currently looking at (e.g. a pairing result).
         if (!pairing && port != lastPromptPort) {
@@ -163,6 +187,15 @@ class AdbPairingService : Service() {
                 goForeground(inputOrWaiting())
             }
 
+            ACTION_DEBUG_PAIR -> {
+                if (!isDebuggable(this)) return START_NOT_STICKY
+                val code = intent.getStringExtra(EXTRA_DEBUG_CODE).orEmpty()
+                val port = intent.getIntExtra(EXTRA_PORT, -1)
+                val host = intent.getStringExtra(EXTRA_DEBUG_HOST)
+                goForeground(workingNotification(port))
+                pair(code, port, host)
+            }
+
             ACTION_STOP -> {
                 stopDiscovery()
                 NotificationManagerCompat.from(this).cancel(ID_FOREGROUND)
@@ -205,23 +238,34 @@ class AdbPairingService : Service() {
 
     // ------------------------------------------------------------------ pairing
 
-    private fun pair(code: String, port: Int) {
+    private fun pair(code: String, port: Int, host: String? = null) {
         pairing = true
         thread(name = "adb-pairing-$port") {
-            val failure = runCatching {
-                val keyManager = AdbKeyManager(applicationContext)
-                PairingConnectionCtx(
-                    "127.0.0.1",
-                    port,
-                    code.toByteArray(Charsets.UTF_8),
-                    keyManager.privateKey,
-                    keyManager.certificate,
-                    DEVICE_NAME
-                ).use { it.start() }
-            }.exceptionOrNull()
+            // Prefer the address adbd advertised over mDNS; fall back to loopback for devices
+            // whose pairing server also listens there.
+            val hosts = listOfNotNull(host?.takeIf { it.isNotBlank() }, lastHost, "127.0.0.1").distinct()
+            var failure: Throwable? = null
+            for (candidate in hosts) {
+                Log.i(TAG, "pairing via $candidate:$port")
+                failure = runCatching {
+                    val keyManager = AdbKeyManager(applicationContext)
+                    PairingConnectionCtx(
+                        candidate,
+                        port,
+                        code.toByteArray(Charsets.UTF_8),
+                        keyManager.privateKey,
+                        keyManager.certificate,
+                        DEVICE_NAME
+                    ).use { it.start() }
+                }.exceptionOrNull()
+                if (failure == null || failure !is ConnectException) break
+            }
 
-            if (failure == null) {
+            val result = failure
+            if (result == null) {
                 Log.i(TAG, "pair succeeded on port $port")
+                // adbd now trusts our key, so the main screen can connect without a code.
+                PairingState(this).isPaired = true
                 mainHandler.post {
                     pairing = false
                     notify(ID_RESULT, succeedNotification())
@@ -229,10 +273,10 @@ class AdbPairingService : Service() {
                     goForeground(waitingNotification())
                 }
             } else {
-                Log.w(TAG, "pair failed on port $port", failure)
+                Log.w(TAG, "pair failed on port $port (phase=${PairingConnectionCtx.sLastPhase})", result)
                 mainHandler.post {
                     pairing = false
-                    notify(ID_RESULT, failureNotification(describeFailure(failure)))
+                    notify(ID_RESULT, failureNotification(describeFailure(result)))
                     goForeground(waitingNotification())
                 }
             }
@@ -251,6 +295,10 @@ class AdbPairingService : Service() {
             // mean the SPAKE2 keys did not match, i.e. a wrong or expired pairing code
             lower.contains("exchange") || lower.contains("cipher") || lower.contains("password") ->
                 getString(R.string.adb_pairing_failed_code)
+
+            // adbd mixes the TLS exporter output into the SPAKE2 password, so a failure to export
+            // it aborts pairing before any code can be checked
+            lower.contains("keying material") -> getString(R.string.adb_pairing_failed_tls_export)
 
             lower.contains("tls") || lower.contains("ssl") ->
                 getString(R.string.adb_pairing_failed_tls)

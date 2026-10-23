@@ -14,6 +14,7 @@ import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -31,6 +32,8 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
+
+import org.conscrypt.Conscrypt;
 
 // https://github.com/aosp-mirror/platform_system_core/blob/android-11.0.0_r1/adb/pairing_connection/pairing_connection.cpp
 // Also based on Shizuku's implementation
@@ -60,6 +63,9 @@ public final class PairingConnectionCtx implements Closeable {
     private final SSLContext mSslContext;
     private final Role mRole = Role.Client;
 
+    /** Last protocol step reached, useful for diagnosing pairing failures. */
+    public static volatile String sLastPhase = "idle";
+
     private DataInputStream mInputStream;
     private DataOutputStream mOutputStream;
     private PairingAuthCtx mPairingAuthCtx;
@@ -73,7 +79,7 @@ public final class PairingConnectionCtx implements Closeable {
         this.mPswd = Objects.requireNonNull(pswd);
         this.mPeerInfo = new PeerInfo(PeerInfo.ADB_RSA_PUB_KEY, AndroidPubkey.encodeWithName((RSAPublicKey)
                 keyPair.getPublicKey(), Objects.requireNonNull(deviceName)));
-        this.mSslContext = SslUtils.getSslContext(keyPair);
+        this.mSslContext = SslUtils.getPairingSslContext(keyPair);
     }
 
     public PairingConnectionCtx(@NonNull String host, int port, @NonNull byte[] pswd, @NonNull PrivateKey privateKey,
@@ -91,11 +97,13 @@ public final class PairingConnectionCtx implements Closeable {
         mState = State.ExchangingMsgs;
 
         // Start worker
+        sLastPhase = "tls";
         setupTlsConnection();
 
         for (; ; ) {
             switch (mState) {
                 case ExchangingMsgs:
+                    sLastPhase = "spake2";
                     if (!doExchangeMsgs()) {
                         notifyResult();
                         throw new IOException("Exchanging message wasn't successful.");
@@ -103,6 +111,7 @@ public final class PairingConnectionCtx implements Closeable {
                     mState = State.ExchangingPeerInfo;
                     break;
                 case ExchangingPeerInfo:
+                    sLastPhase = "peer-info";
                     if (!doExchangePeerInfo()) {
                         notifyResult();
                         throw new IOException("Could not exchange peer info.");
@@ -153,29 +162,105 @@ public final class PairingConnectionCtx implements Closeable {
         this.mPairingAuthCtx = pairingAuthCtx;
     }
 
-    @SuppressLint("PrivateApi") // Conscrypt is a stable private API
+    /**
+     * Exports the TLS keying material that adbd mixes into the SPAKE2 password.
+     *
+     * <p>The socket is created from {@link SslUtils#getPairingSslContext}, i.e. from the Conscrypt
+     * copy bundled in this app, so it can export the material itself. That path is a plain library
+     * call: it never goes through the hidden-API-gated {@code com.android.org.conscrypt.Conscrypt}
+     * (which newer Android versions answer with "Accessing hidden method ... denied") and it never
+     * casts a platform socket to an {@code org.conscrypt} one (which fails with
+     * "Not a conscrypt socket: com.android.org.conscrypt.Java8EngineSocket").
+     *
+     * <p>The reflective paths below only run if the bundled provider is unavailable.
+     */
     private byte[] exportKeyingMaterial(SSLSocket sslSocket, int length) throws SSLException {
-        // Conscrypt#exportKeyingMaterial(SSLSocket socket, String label, byte[] context, int length): byte[]
-        //          throws SSLException
+        String socketClass = sslSocket.getClass().getName();
+        Log.i(TAG, "exporting keying material from " + socketClass);
+
         try {
-            Class<?> conscryptClass;
-            if (SslUtils.isCustomConscrypt()) {
-                conscryptClass = Class.forName("org.conscrypt.Conscrypt");
-            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                // Although support for conscrypt has been added in Android 5.0 (Lollipop),
-                // TLS1.3 isn't supported until Android 9 (Pie).
-                throw new SSLException("TLSv1.3 isn't supported on your platform. Use custom Conscrypt library instead.");
-            } else {
-                conscryptClass = Class.forName("com.android.org.conscrypt.Conscrypt");
+            if (Conscrypt.isConscrypt(sslSocket)) {
+                byte[] keyMaterial = Conscrypt.exportKeyingMaterial(
+                        sslSocket, EXPORTED_KEY_LABEL, null, length);
+                if (keyMaterial != null && keyMaterial.length == length) {
+                    Log.i(TAG, "keying material exported via bundled Conscrypt");
+                    return keyMaterial;
+                }
+                Log.w(TAG, "bundled Conscrypt returned " + (keyMaterial == null
+                        ? "no keying material" : keyMaterial.length + " bytes instead of " + length));
             }
-            Method exportKeyingMaterial = conscryptClass.getMethod("exportKeyingMaterial", SSLSocket.class,
-                    String.class, byte[].class, int.class);
-            return (byte[]) exportKeyingMaterial.invoke(null, sslSocket, EXPORTED_KEY_LABEL, null, length);
-        } catch (SSLException e) {
-            throw e;
-        } catch (Throwable th) {
-            throw new SSLException(th);
+        } catch (Throwable e) {
+            Log.w(TAG, "bundled Conscrypt could not export keying material", e);
         }
+
+        // Platform socket: only reachable when the bundled provider failed to load. On Android 10+
+        // the platform Conscrypt methods are hidden APIs and are normally denied, so this is a best
+        // effort fallback that keeps the failure diagnostic instead of silent.
+        Throwable last = null;
+        for (String className : new String[]{"com.android.org.conscrypt.Conscrypt", "org.conscrypt.Conscrypt"}) {
+            try {
+                Class<?> conscryptClass = Class.forName(className);
+                byte[] keyMaterial = exportFromEngine(conscryptClass, sslSocket, length);
+                if (keyMaterial == null) {
+                    keyMaterial = exportFromSocket(conscryptClass, sslSocket, length);
+                }
+                if (keyMaterial != null && keyMaterial.length == length) {
+                    Log.i(TAG, "keying material exported via " + className);
+                    return keyMaterial;
+                }
+                if (last == null) {
+                    last = new SSLException("Unexpected keying material length from " + className);
+                }
+                Log.w(TAG, "export via " + className + " returned bad length", last);
+            } catch (InvocationTargetException e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                Log.w(TAG, "export via " + className + " failed", cause);
+                if (last == null) last = cause;
+            } catch (Throwable e) {
+                Log.w(TAG, "export via " + className + " unavailable", e);
+                if (last == null) last = e;
+            }
+        }
+
+        SSLException failure = new SSLException(
+                "TLS keying material export failed on " + socketClass
+                        + " (bundled Conscrypt unavailable, platform exporter blocked)");
+        if (last != null) failure.initCause(last);
+        throw failure;
+    }
+
+    /**
+     * Exports the TLS keying material straight from the {@code ConscryptEngine} behind the socket.
+     * Some platform builds hand out {@code Java8EngineSocket}, which Conscrypt's socket-level
+     * helper rejects even though the engine supports the exporter.
+     */
+    @Nullable
+    private static byte[] exportFromEngine(@NonNull Class<?> conscryptClass, @NonNull SSLSocket sslSocket,
+                                           int length) throws Exception {
+        Method getEngine;
+        try {
+            getEngine = conscryptClass.getMethod("getEngine", SSLSocket.class);
+        } catch (NoSuchMethodException e) {
+            return null;
+        }
+        Object engine = getEngine.invoke(null, sslSocket);
+        if (engine == null) return null;
+        Method export;
+        try {
+            export = engine.getClass().getMethod("exportKeyingMaterial", String.class, byte[].class, int.class);
+        } catch (NoSuchMethodException e) {
+            export = engine.getClass().getDeclaredMethod("exportKeyingMaterial", String.class, byte[].class, int.class);
+            export.setAccessible(true);
+        }
+        return (byte[]) export.invoke(engine, EXPORTED_KEY_LABEL, null, length);
+    }
+
+    @Nullable
+    private static byte[] exportFromSocket(@NonNull Class<?> conscryptClass, @NonNull SSLSocket sslSocket,
+                                           int length) throws Exception {
+        Method exportKeyingMaterial = conscryptClass.getMethod("exportKeyingMaterial",
+                SSLSocket.class, String.class, byte[].class, int.class);
+        return (byte[]) exportKeyingMaterial.invoke(null, sslSocket, EXPORTED_KEY_LABEL, null, length);
     }
 
     private void writeHeader(@NonNull PairingPacketHeader header, @NonNull byte[] payload) throws IOException {
@@ -276,15 +361,19 @@ public final class PairingConnectionCtx implements Closeable {
     @Override
     public void close() {
         Arrays.fill(mPswd, (byte) 0);
-        try {
-            mInputStream.close();
-        } catch (IOException ignore) {
+        if (mInputStream != null) {
+            try {
+                mInputStream.close();
+            } catch (IOException ignore) {
+            }
         }
-        try {
-            mOutputStream.close();
-        } catch (IOException ignore) {
+        if (mOutputStream != null) {
+            try {
+                mOutputStream.close();
+            } catch (IOException ignore) {
+            }
         }
-        if (mState != State.Ready) {
+        if (mState != State.Ready && mPairingAuthCtx != null) {
             mPairingAuthCtx.destroy();
         }
     }
