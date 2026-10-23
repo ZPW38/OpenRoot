@@ -19,6 +19,8 @@ import java.io.File
 data class DeviceInfo(
     val deviceName: String,
     val chipset: String,
+    /** Raw release string, e.g. "15" — engines match on this. */
+    val androidRelease: String,
     val androidVersion: String,
     val kernel: String,
     val selinux: String,
@@ -59,6 +61,7 @@ data class DeviceInfo(
             return DeviceInfo(
                 deviceName = deviceName(field(1), field(2)),
                 chipset = chipset(field(3), field(4), field(5), field(6)),
+                androidRelease = field(7),
                 androidVersion = androidVersion(field(7), field(8)),
                 kernel = field(9).ifEmpty { UNKNOWN },
                 selinux = field(10).ifEmpty { UNKNOWN },
@@ -89,6 +92,7 @@ data class DeviceInfo(
                 deviceName = customName.ifEmpty { deviceName(manufacturer, model) },
                 chipset = chipset(socManufacturer, socModel,
                     Build.BOARD?.trim().orEmpty(), Build.HARDWARE?.trim().orEmpty()),
+                androidRelease = Build.VERSION.RELEASE.orEmpty(),
                 androidVersion = androidVersion(Build.VERSION.RELEASE, Build.VERSION.SDK_INT.toString()),
                 kernel = System.getProperty("os.version")?.trim().orEmpty().ifEmpty { UNKNOWN },
                 selinux = localSelinux(),

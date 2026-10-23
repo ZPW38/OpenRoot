@@ -1,5 +1,8 @@
 package com.hexo141.liquidglass.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -34,7 +39,12 @@ import com.kyant.shapes.RoundedRectangle
 /** Whether the connected kernel has a bundled profile. */
 enum class SupportState {
     NotConnected,
+    /** Connected, but the engine decision has not come back yet. */
+    Checking,
+    /** A kernel profile matches this exact build. */
     Supported,
+    /** An engine can be attempted but has never succeeded on this kernel. */
+    Candidate,
     Unsupported,
 }
 
@@ -48,27 +58,36 @@ fun DeviceStatusCard(
     backdrop: Backdrop,
     state: SupportState,
     release: String,
+    engineLabel: String? = null,
     modifier: Modifier = Modifier,
     surfaceColor: Color = Color.Unspecified,
 ) {
     val accent = when (state) {
         SupportState.Supported -> Color(0xFF4ADE80)
+        SupportState.Candidate -> Color(0xFFFBBF24)
         SupportState.Unsupported -> Color(0xFFF87171)
         SupportState.NotConnected -> Color.White.copy(alpha = 0.65f)
+        SupportState.Checking -> Color(0xFF7DD3FC)
     }
     val title = when (state) {
         SupportState.Supported -> "Supported"
+        SupportState.Candidate -> "Untested"
         SupportState.Unsupported -> "Unsupported"
         SupportState.NotConnected -> "Not connected"
+        SupportState.Checking -> "Checking"
     }
     val subtitle = when (state) {
         SupportState.NotConnected -> "No adbd session yet"
+        SupportState.Checking -> release.ifEmpty { "Reading device" }
         else -> release.ifEmpty { "Unknown kernel" }
     }
     val detail = when (state) {
-        SupportState.Supported -> "Kernel profile and payload are ready"
-        SupportState.Unsupported -> "No profile bundled for this kernel"
+        SupportState.Supported -> engineLabel?.let { "Engine: $it" } ?: "Payload is ready"
+        SupportState.Candidate -> engineLabel?.let { "Engine: $it - not verified yet" } ?: "Not verified yet"
+        SupportState.Unsupported -> engineLabel?.let { "Engine: $it - last run did not root" }
+            ?: "No payload supports this kernel"
         SupportState.NotConnected -> "Connect to check device support"
+        SupportState.Checking -> "Looking for a matching engine"
     }
 
     Box(
@@ -136,32 +155,52 @@ fun DeviceStatusCard(
 
 @Composable
 private fun StatusBadge(state: SupportState, accent: Color, modifier: Modifier = Modifier) {
+    // 0 -> 1 while the ring is drawn in; two revolutions end on a complete track.
+    val spin = remember { Animatable(if (state == SupportState.NotConnected) 1f else 0f) }
+    LaunchedEffect(state) {
+        if (state == SupportState.NotConnected) {
+            spin.snapTo(1f)
+            return@LaunchedEffect
+        }
+        spin.snapTo(0f)
+        spin.animateTo(1f, tween(durationMillis = 1500, easing = LinearEasing))
+    }
+
+    val animated = state != SupportState.NotConnected
+    val progress = if (animated) spin.value else 1f
+
     Canvas(modifier) {
         val stroke = size.minDimension * 0.09f
         val inset = stroke / 2f
         val diameter = size.minDimension - stroke
+        val ringTopLeft = Offset(inset, inset)
+        val ringSize = Size(diameter, diameter)
+        val w = size.width
+        val h = size.height
+
+        // Faint track, then the bright arc sweeps around it twice and ends as a full ring.
         drawArc(
-            color = accent.copy(alpha = 0.35f),
+            color = accent.copy(alpha = 0.25f),
             startAngle = 0f,
             sweepAngle = 360f,
             useCenter = false,
-            topLeft = Offset(inset, inset),
-            size = Size(diameter, diameter),
+            topLeft = ringTopLeft,
+            size = ringSize,
             style = Stroke(width = stroke)
         )
-        // An arc over the ring keeps the badge from looking flat.
+        // The leading edge turns twice while the arc grows, so the track ends up complete.
         drawArc(
             color = accent,
-            startAngle = 200f,
-            sweepAngle = 130f,
+            startAngle = -90f + 720f * progress,
+            sweepAngle = 360f * progress,
             useCenter = false,
-            topLeft = Offset(inset, inset),
-            size = Size(diameter, diameter),
+            topLeft = ringTopLeft,
+            size = ringSize,
             style = Stroke(width = stroke, cap = StrokeCap.Round)
         )
 
-        val w = size.width
-        val h = size.height
+        val glyph = accent
+        val glyphStroke = Stroke(width = stroke * 1.1f, cap = StrokeCap.Round)
         when (state) {
             SupportState.Supported -> {
                 val path = Path().apply {
@@ -169,11 +208,7 @@ private fun StatusBadge(state: SupportState, accent: Color, modifier: Modifier =
                     lineTo(w * 0.44f, h * 0.66f)
                     lineTo(w * 0.72f, h * 0.36f)
                 }
-                drawPath(
-                    path = path,
-                    color = accent,
-                    style = Stroke(width = stroke * 1.1f, cap = StrokeCap.Round)
-                )
+                drawPath(path = path, color = glyph, style = glyphStroke)
             }
 
             SupportState.Unsupported -> {
@@ -183,16 +218,27 @@ private fun StatusBadge(state: SupportState, accent: Color, modifier: Modifier =
                     moveTo(w * 0.64f, h * 0.36f)
                     lineTo(w * 0.36f, h * 0.64f)
                 }
-                drawPath(
-                    path = path,
-                    color = accent,
-                    style = Stroke(width = stroke * 1.1f, cap = StrokeCap.Round)
+                drawPath(path = path, color = glyph, style = glyphStroke)
+            }
+
+            SupportState.Candidate -> {
+                // Question mark: the engine can run but nobody has proved it on this kernel.
+                val path = Path().apply {
+                    moveTo(w * 0.40f, h * 0.40f)
+                    cubicTo(w * 0.40f, h * 0.28f, w * 0.62f, h * 0.28f, w * 0.62f, h * 0.42f)
+                    cubicTo(w * 0.62f, h * 0.52f, w * 0.50f, h * 0.52f, w * 0.50f, h * 0.62f)
+                }
+                drawPath(path = path, color = glyph, style = glyphStroke)
+                drawCircle(
+                    color = glyph,
+                    radius = stroke * 0.55f,
+                    center = Offset(w * 0.50f, h * 0.73f)
                 )
             }
 
-            SupportState.NotConnected -> {
+            SupportState.Checking, SupportState.NotConnected -> {
                 drawLine(
-                    color = accent,
+                    color = glyph,
                     start = Offset(w * 0.36f, h * 0.5f),
                     end = Offset(w * 0.64f, h * 0.5f),
                     strokeWidth = stroke * 1.1f,

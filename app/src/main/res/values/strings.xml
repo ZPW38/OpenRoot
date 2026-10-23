@@ -47,4 +47,8 @@
     <string name="exploit_unsupported_kernel">No profile bundled for this kernel</string>
     <string name="exploit_finished">Payload finished</string>
     <string name="exploit_exit_code">Payload exited with code %1$d</string>
+    <string name="exploit_ksu_loaded">Temporary root acquired, KernelSU module loaded</string>
+    <string name="exploit_ksu_opened">Temporary root acquired, opening KernelSU</string>
+    <string name="engine_kernel_profile">GhostLock</string>
+    <string name="exploit_root_ready">Temporary root ready, type a command below</string>
 </resources>

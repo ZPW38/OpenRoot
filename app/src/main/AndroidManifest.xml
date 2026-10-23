@@ -19,6 +19,20 @@
         android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
         tools:targetApi="34" />
 
+    <!-- 临时 root 跑完后要定位并拉起 KernelSU 系管理器（Android 11+ 包可见性） -->
+    <queries>
+        <!-- 需要枚举带启动图标的应用，才能找到改名/分叉的 root 管理器 -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <package android:name="me.weishu.kernelsu" />
+        <package android:name="me.weishu.kernelsu.pr" />
+        <package android:name="com.resukisu.resukisu" />
+        <package android:name="org.bakasu.bakasu" />
+        <package android:name="com.kowx712.supermanager" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

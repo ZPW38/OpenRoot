@@ -9,13 +9,22 @@ object AdbShell {
     /** Chunk size used when streaming a file into `cat`; each write waits for the daemon's READY. */
     private const val PUSH_CHUNK = 32 * 1024
 
+    /** A shell command that stops producing output for this long is treated as stuck. */
+    private const val IDLE_TIMEOUT_MS = 15_000L
+
     /**
      * @param command command line, executed by the daemon's shell (`shell:<command>`)
+     * @param timeoutMs how long the command may stay silent before the stream is closed
      * @return everything the command wrote to stdout, decoded as UTF-8
      */
     @Throws(Exception::class)
-    fun exec(manager: AbsAdbConnectionManager, command: String): String {
+    fun exec(
+        manager: AbsAdbConnectionManager,
+        command: String,
+        timeoutMs: Long = IDLE_TIMEOUT_MS,
+    ): String {
         val stream = manager.openStream("shell:$command")
+        val watchdog = StreamWatchdog(stream, timeoutMs)
         try {
             val out = ByteArrayOutputStream()
             val buffer = ByteArray(4096)
@@ -26,11 +35,13 @@ object AdbShell {
                 } catch (e: IOException) {
                     if (stream.isClosed) break else throw e
                 }
+                watchdog.touch()
                 if (read <= 0) break
                 out.write(buffer, 0, read)
             }
             return out.toString("UTF-8")
         } finally {
+            watchdog.stop()
             runCatching { stream.close() }
         }
     }
@@ -45,9 +56,13 @@ object AdbShell {
         manager: AbsAdbConnectionManager,
         command: String,
         onLine: (String) -> Unit,
+        idleTimeoutMs: Long = 120_000L,
     ): Int {
-        // The plain shell service carries no exit status, so the wrapper echoes it as a marker.
-        val stream = manager.openStream("shell:$command; echo \"__OPENROOT_EXIT:\$?\"")
+        // `pty` matters: with a pipe the payload's stdio is block buffered, so its log only arrives
+        // in 4 KB chunks. A pty makes it line buffered, i.e. real time like a terminal. The v1
+        // service carries no exit status, so the wrapper echoes it as a marker instead.
+        val stream = openStream(manager, "$command; echo \"$EXIT_MARKER\$?\"", pty = true)
+        val watchdog = StreamWatchdog(stream, idleTimeoutMs)
         val pending = StringBuilder()
         var exitCode = -1
         try {
@@ -58,6 +73,7 @@ object AdbShell {
                 } catch (e: IOException) {
                     if (stream.isClosed) break else throw e
                 }
+                watchdog.touch()
                 if (read <= 0) break
                 pending.append(String(buffer, 0, read, Charsets.UTF_8))
                 while (true) {
@@ -74,6 +90,7 @@ object AdbShell {
             }
             if (pending.isNotEmpty()) onLine(pending.toString().trimEnd('\r'))
         } finally {
+            watchdog.stop()
             runCatching { stream.close() }
         }
         return exitCode
@@ -94,6 +111,52 @@ object AdbShell {
         } finally {
             runCatching { stream.close() }
         }
+    }
+
+    /**
+     * Closes the stream when it stops producing data, so a daemon that never answers cannot leave a
+     * caller waiting forever.
+     */
+    private class StreamWatchdog(private val stream: AdbStream, private val timeoutMs: Long) {
+        @Volatile
+        private var lastActivity = System.currentTimeMillis()
+
+        private val thread = Thread({
+            while (!Thread.currentThread().isInterrupted) {
+                if (System.currentTimeMillis() - lastActivity > timeoutMs) {
+                    runCatching { stream.close() }
+                    return@Thread
+                }
+                try {
+                    Thread.sleep(250)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+            }
+        }, "adb-shell-watchdog").apply {
+            isDaemon = true
+            start()
+        }
+
+        fun touch() {
+            lastActivity = System.currentTimeMillis()
+        }
+
+        fun stop() {
+            thread.interrupt()
+        }
+    }
+
+    /** Opens a shell service, falling back to a plain pipe when the daemon rejects the pty flag. */
+    private fun openStream(
+        manager: AbsAdbConnectionManager,
+        command: String,
+        pty: Boolean,
+    ): AdbStream {
+        if (pty) {
+            runCatching { return manager.openStream("shell,pty:$command") }
+        }
+        return manager.openStream("shell:$command")
     }
 
     private const val EXIT_MARKER = "__OPENROOT_EXIT:"

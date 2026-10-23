@@ -269,8 +269,12 @@ class AdbPairingService : Service() {
                 mainHandler.post {
                     pairing = false
                     notify(ID_RESULT, succeedNotification())
-                    // Keep listening so pairing can be repeated
-                    goForeground(waitingNotification())
+                    // adbd 已经收下公钥，配对完成后不必再常驻监听：收掉前台通知并结束服务，
+                    // 主界面会立刻把配对按钮收起来，之后直接走无码直连。
+                    stopDiscovery()
+                    NotificationManagerCompat.from(this).cancel(ID_FOREGROUND)
+                    stopForegroundSafe()
+                    stopSelf()
                 }
             } else {
                 Log.w(TAG, "pair failed on port $port (phase=${PairingConnectionCtx.sLastPhase})", result)

@@ -145,7 +145,7 @@ private fun InfoTile(
                         drawRect(surfaceColor)
                     }
                     // 壁纸很亮时纯折射会看不清字，压一层很淡的暗色再叠高光
-                    drawRect(Color.Black.copy(alpha = 0.12f))
+                    drawRect(Color.Black.copy(alpha = 0.22f))
                     drawRect(Color.White.copy(alpha = 0.08f))
                 }
             )
@@ -165,7 +165,7 @@ private fun InfoTile(
         BasicText(
             text = value,
             style = TextStyle(
-                color = Color.White.copy(alpha = 0.62f),
+                color = Color.White.copy(alpha = 0.8f),
                 fontSize = if (monospace) 11.sp else 12.sp,
                 fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
                 lineHeight = if (monospace) 15.sp else 16.sp,
