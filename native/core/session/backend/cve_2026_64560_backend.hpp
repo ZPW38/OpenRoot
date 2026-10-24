@@ -14,6 +14,11 @@ namespace ghostlock::session::backend {
      * future fields must live in this backend's own section and must never
      * reuse the cve_2026_43499 slots.
      *
+     * The vulnerability itself ships as a separate app-level engine
+     * (root/PctRunner.kt + native-pct/, see docs/CVE-2026-64560.md); it is not
+     * a GhostLock backend and deliberately does not go through this profile /
+     * wire format, so this id stays unavailable.
+     *
      * Availability is owned by component_catalog::backend_available(); this
      * type only carries the stable id, the identity contract and the reason. */
     struct Cve2026_64560Policy final {

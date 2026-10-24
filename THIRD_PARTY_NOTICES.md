@@ -35,6 +35,30 @@
 该依赖同时拉入 Jetbrains Compose 多平台构件（Android 变体映射到 `androidx.compose.*` 1.10.x）
 与 `io.github.kyant0:shapes`，均来自 Maven Central（阿里云镜像）。
 
+## CVE-2025-21479 载荷
+
+| 来源 | 路径 | 说明 | 许可 |
+| --- | --- | --- | --- |
+| [zhuowei/cheese](https://github.com/zhuowei/cheese) | `native-gpu/quest/**` | Quest 3/3S 版本，commit `1ae1e77` | 上游未声明许可证 |
+| [Qingizi7/cve-2025-21479_iqooneo8](https://github.com/Qingizi7/cve-2025-21479_iqooneo8) | `native-gpu/snapdragon/**` | iQOO Neo8 / SM8475 移植，commit `b63479` | 上游未声明许可证 |
+
+两个上游仓库都在 README 中声明仅用于对自有或已授权设备的安全研究。`adrenaline.h` 源自
+hawkes 的 Project Zero Adrenaline，`kallsyms_lookup.c` 源自上面的 cheese 谱系；本地改动仅为
+目录拆分、NDK Makefile 与 APK 打包，漏洞代码本身保持上游原样。
+
+## CVE-2026-64560 载荷
+
+| 来源 | 路径 | 说明 | 许可 |
+| --- | --- | --- | --- |
+| [Wangs-official/opace6-cve-2026-64560](https://github.com/Wangs-official/opace6-cve-2026-64560) | `native-pct/opace6/**` | OnePlus Ace 6（OP6113L1 / 6.6.118 GKI）移植，commit `4558a33` | Apache-2.0 |
+
+该移植的上游是 `NebuSec/CyberMeowfia` 的 Android-CVE-2026-64560 研究（原 Xiaomi 15 `dada` 版本），
+`NOTICE` 随源码一起保留在 `native-pct/opace6/NOTICE`。漏洞代码本身保持原样，本地改动只有两处：
+
+- 根子进程支持 `OPENROOT_HANDOFF` 环境变量：拿到 root 后 exec 暂存的 `loader`
+  （`native-or/bootstrap.c`），而不是停在无人输入的交互 shell；
+- 目录拆分与 NDK Makefile（`native-pct/Makefile`）。
+
 ## 内置壁纸
 
 `app/src/main/res/drawable-nodpi/bg.jpg` 由项目使用者提供（来自本地下载文件，

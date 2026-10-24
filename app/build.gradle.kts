@@ -46,10 +46,12 @@ android {
 // ---------------------------------------------------------------------------
 // Native payloads
 //
-// Two engines ship as arm64 executables in jniLibs:
-//   native/     kernel-profile payload (libghostlock.so)
-//   native-or/  page cache payload     (libopenroot.so + libopenbootstrap.so)
-// Both are compiled with the NDK, copied into jniLibs by a single task and
+// Four engines ship as arm64 executables in jniLibs:
+//   native/      kernel-profile payload (libghostlock.so)
+//   native-or/   page cache payload     (libopenroot.so + libopenbootstrap.so)
+//   native-gpu/  Adreno GPU payloads    (libcheese-quest.so + libcheese-snapdragon.so)
+//   native-pct/  posix-cpu-timers UAF   (libpct-opace6.so)
+// All are compiled with the NDK, copied into jniLibs by a single task and
 // stripped afterwards; a single writer keeps Gradle's output validation happy.
 // ---------------------------------------------------------------------------
 
@@ -99,16 +101,42 @@ val buildNativePageCache = tasks.register<Exec>("buildNativePageCache") {
     outputs.dir(rootProject.layout.buildDirectory.dir("or"))
 }
 
+val buildNativeGpu = tasks.register<Exec>("buildNativeGpu") {
+    group = "build"
+    description = "Compiles the arm64 Adreno GPU payloads with the NDK"
+    workingDir = rootProject.layout.projectDirectory.dir("native-gpu").asFile
+    commandLine(ndkMake, "payload", "-j4")
+    environment("NDK_ROOT", ndkDir)
+    inputs.dir(rootProject.layout.projectDirectory.dir("native-gpu"))
+    outputs.dir(rootProject.layout.buildDirectory.dir("gpu"))
+}
+
+val buildNativePct = tasks.register<Exec>("buildNativePct") {
+    group = "build"
+    description = "Compiles the arm64 posix-cpu-timers payload with the NDK"
+    workingDir = rootProject.layout.projectDirectory.dir("native-pct").asFile
+    commandLine(ndkMake, "payload", "-j4")
+    environment("NDK_ROOT", ndkDir)
+    inputs.dir(rootProject.layout.projectDirectory.dir("native-pct"))
+    outputs.dir(rootProject.layout.buildDirectory.dir("pct"))
+}
+
 /** The only task that writes into jniLibs. */
 val prepareNativePayloads = tasks.register<Copy>("prepareNativePayloads") {
     group = "build"
-    description = "Copies both payloads into jniLibs"
-    dependsOn(buildNativeExploit, buildNativePageCache)
+    description = "Copies every payload into jniLibs"
+    dependsOn(buildNativeExploit, buildNativePageCache, buildNativeGpu, buildNativePct)
     from(rootProject.layout.buildDirectory.file("native/ghostlock")) {
         rename { "libghostlock.so" }
     }
     from(rootProject.layout.buildDirectory.dir("or")) {
         include("libopenroot.so", "libopenbootstrap.so")
+    }
+    from(rootProject.layout.buildDirectory.dir("gpu")) {
+        include("libcheese-quest.so", "libcheese-snapdragon.so")
+    }
+    from(rootProject.layout.buildDirectory.dir("pct")) {
+        include("libpct-opace6.so")
     }
     into(jniLibsDir)
 }
@@ -117,8 +145,14 @@ val stripNativePayloads = tasks.register<Exec>("stripNativePayloads") {
     group = "build"
     description = "Strips the packaged payloads"
     dependsOn(prepareNativePayloads)
-    val targets = listOf("libghostlock.so", "libopenroot.so", "libopenbootstrap.so")
-        .map { jniLibsDir.file(it).asFile.absolutePath }
+    val targets = listOf(
+        "libghostlock.so",
+        "libopenroot.so",
+        "libopenbootstrap.so",
+        "libcheese-quest.so",
+        "libcheese-snapdragon.so",
+        "libpct-opace6.so",
+    ).map { jniLibsDir.file(it).asFile.absolutePath }
     commandLine(listOf(ndkStrip, "--strip-all") + targets)
     inputs.files(targets.map { File(it) })
 }

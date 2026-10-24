@@ -111,6 +111,13 @@ fun DeviceInfoCards(
             )
         }
         InfoTile(
+            label = "GPU",
+            value = info.gpu,
+            backdrop = backdrop,
+            surfaceColor = surfaceColor,
+            modifier = Modifier.fillMaxWidth()
+        )
+        InfoTile(
             label = "Kernel",
             value = info.kernel,
             backdrop = backdrop,

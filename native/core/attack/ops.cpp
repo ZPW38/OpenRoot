@@ -240,6 +240,7 @@ namespace ghostlock::attack {
             "LOG='%s'\n"
             "SAFE_MODE=%d\n"
             "KSUD='%s'\n"
+            "KSU_PKG='%s'\n"
             "echo \"[*] root script start uid=$(id -u) euid=$(id -u)\" >\"$LOG\"\n"
             "chmod 644 \"$LOG\" 2>/dev/null\n"
             "echo \"[*] seccomp=$(grep Seccomp /proc/self/status 2>/dev/null | tr '\\n' ' ')\" >>\"$LOG\"\n"
@@ -391,8 +392,14 @@ namespace ghostlock::attack {
             "  fi\n"
             "  echo \"[*] late-load kmi=$KMI\" >>\"$LOG\"\n"
             "  chmod 755 \"$KSUD\" 2>/dev/null\n"
-            "  \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell >>\"$LOG\" 2>&1\n"
-            "  echo \"[*] late-load exit=$?\" >>\"$LOG\"\n"
+            "  # KernelSU binds the module to the manager app through --package-name; without it\n"
+            "  # the module loads but the manager cannot recognise itself as the manager.\n"
+            "  if [ -n \"$KSU_PKG\" ]; then\n"
+            "    \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell --package-name \"$KSU_PKG\" >>\"$LOG\" 2>&1\n"
+            "  else\n"
+            "    \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell >>\"$LOG\" 2>&1\n"
+            "  fi\n"
+            "  echo \"[*] late-load exit=$? pkg=${KSU_PKG:-none}\" >>\"$LOG\"\n"
             "fi\n"
             "echo \"[*] temp su uid=$(id -u); watching kernelsu.ko\" >>\"$LOG\"\n"
             "KSU_READY=0\n"
@@ -416,6 +423,7 @@ namespace ghostlock::attack {
             (config::runtime_config_snapshot().ksu_log_path.c_str()),
             session::g_exploit_session.profile.safe_mode() ? 1 : 0,
             (config::runtime_config_snapshot().ksud_path.c_str()),
+            (config::runtime_config_snapshot().ksu_package.c_str()),
             (config::runtime_config_snapshot().debug_dir.c_str()));
         if (n < 0 || n >= static_cast<int32_t>(script.size())) {
             pr_warning("root script too long\n");

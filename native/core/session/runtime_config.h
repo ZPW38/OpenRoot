@@ -23,6 +23,10 @@ namespace ghostlock::config {
         /* ksud binary from GHOSTLOCK_KSUD, shell-escaped for the root
          * script; empty keeps the script's own search order. */
         std::string ksud_path;
+        /* Manager package from GHOSTLOCK_KSU_PKG, shell-escaped. KernelSU needs it on
+         * `late-load` so the module binds to the installed manager app; empty keeps the
+         * argument out and the manager has to be picked up by its own scan. */
+        std::string ksu_package;
         /* Kernel-log dump directory from --dump-kernel-log; empty disables the dump. */
         std::string debug_dir;
 

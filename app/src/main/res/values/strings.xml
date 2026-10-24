@@ -48,7 +48,9 @@
     <string name="exploit_finished">Payload finished</string>
     <string name="exploit_exit_code">Payload exited with code %1$d</string>
     <string name="exploit_ksu_loaded">Temporary root acquired, KernelSU module loaded</string>
+    <string name="exploit_ksu_manual">Temporary root acquired, KernelSU module loaded (open the manager manually)</string>
     <string name="exploit_ksu_opened">Temporary root acquired, opening KernelSU</string>
-    <string name="engine_kernel_profile">GhostLock</string>
+    <string name="engine_kernel_profile">CVE-2026-43499</string>
     <string name="exploit_root_ready">Temporary root ready, type a command below</string>
+    <string name="exploit_profile_gate_failed">This build is not the one the payload was ported to</string>
 </resources>

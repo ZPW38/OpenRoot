@@ -23,12 +23,18 @@ import com.hexo141.liquidglass.adb.AdbConnectionManager
 import com.hexo141.liquidglass.adb.AdbKeyManager
 import com.hexo141.liquidglass.adb.AdbPairingService
 import com.hexo141.liquidglass.adb.PairingState
+import com.hexo141.liquidglass.consent.ConsentStore
 import com.hexo141.liquidglass.device.DeviceInfo
 import com.hexo141.liquidglass.root.DirtyFragRunner
 import com.hexo141.liquidglass.root.ExploitMemory
+import com.hexo141.liquidglass.root.GpuRunner
 import com.hexo141.liquidglass.root.KsuManager
+import com.hexo141.liquidglass.root.PctRunner
 import com.hexo141.liquidglass.root.RootExploit
+import com.hexo141.liquidglass.root.RootHandoff
 import com.hexo141.liquidglass.root.RootShell
+import com.hexo141.liquidglass.ui.ConsentScreen
+import com.hexo141.liquidglass.ui.ConsentTransition
 import com.hexo141.liquidglass.ui.PairingScreen
 import com.hexo141.liquidglass.ui.ExploitChoice
 import com.hexo141.liquidglass.ui.SupportState
@@ -38,14 +44,18 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val TAG = "MainActivity"
 
-        /** Engine ids used by the picker. */
-        const val ENGINE_PROFILE = "profile"
-        const val ENGINE_DIRTY_FRAG_KSU = "dirtyfrag-ksu"
-        const val ENGINE_DIRTY_FRAG_CMD = "dirtyfrag-cmd"
+        /** Engine ids used by the picker; one per vulnerability, never per device or payload. */
+        const val ENGINE_CVE_43499 = "cve-2026-43499"
+        const val ENGINE_CVE_64560 = "cve-2026-64560"
+        const val ENGINE_CVE_21479 = "cve-2025-21479"
+        const val ENGINE_CVE_43284 = "cve-2026-43284"
 
         /** How long to wait for `_adb-tls-connect._tcp` before giving up on a direct connect. */
         const val CONNECT_TIMEOUT_MS = 6_000L
     }
+
+    /** 首次启动必须同意两份文件（GPL-3.0 + 临时 root 声明）；false 时只显示声明页 */
+    private val consentAccepted = mutableStateOf(false)
 
     /** 配对服务是否在运行；用 Compose 状态保存，按钮文案自动跟着变 */
     private val pairingRunning = mutableStateOf(false)
@@ -68,7 +78,7 @@ class MainActivity : AppCompatActivity() {
     /** 设备支持状态（状态卡直接用它） */
     private val supportState = mutableStateOf(SupportState.NotConnected)
 
-    /** 可用引擎的名称（内核 profile / DirtyFrag）；null 表示不支持 */
+    /** 可用引擎的 CVE 编号；null 表示没有能跑的漏洞 */
     private val engineLabel = mutableStateOf<String?>(null)
 
     /** 临时 root 载荷正在运行 */
@@ -135,41 +145,60 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
+        consentAccepted.value = ConsentStore.isAccepted(this)
+
         findViewById<ComposeView>(R.id.main).setContent {
-            PairingScreen(
-                running = pairingRunning.value,
-                paired = paired.value,
-                connecting = connecting.value,
-                connected = connected.value,
-                needsPairing = needsPairing.value,
-                supportState = supportState.value,
-                engineLabel = engineLabel.value,
-                deviceInfo = deviceInfo.value,
-                exploiting = exploiting.value,
-                exploitLog = exploitLog.value,
-                exploitStatus = exploitStatus.value,
-                exploitProgress = exploitProgress.value,
-                exploitChoices = exploitChoices.value,
-                pickerVisible = pickerVisible.value,
-                onToggle = ::onPrimaryAction,
-                commandMode = commandMode.value,
-                onExploit = ::openEnginePicker,
-                onPickEngine = ::startExploit,
-                onDismissPicker = { pickerVisible.value = false },
-                onRunCommand = ::runRootCommand
+            // 同意两份文件后淡入主界面；未同意前主界面不会被组合，也不做任何 ADB 操作
+            ConsentTransition(
+                accepted = consentAccepted.value,
+                consent = { ConsentScreen(onAccept = ::acceptConsent) },
+                main = {
+                    PairingScreen(
+                        running = pairingRunning.value,
+                        paired = paired.value,
+                        connecting = connecting.value,
+                        connected = connected.value,
+                        needsPairing = needsPairing.value,
+                        supportState = supportState.value,
+                        engineLabel = engineLabel.value,
+                        deviceInfo = deviceInfo.value,
+                        exploiting = exploiting.value,
+                        exploitLog = exploitLog.value,
+                        exploitStatus = exploitStatus.value,
+                        exploitProgress = exploitProgress.value,
+                        exploitChoices = exploitChoices.value,
+                        pickerVisible = pickerVisible.value,
+                        onToggle = ::onPrimaryAction,
+                        commandMode = commandMode.value,
+                        onExploit = ::openEnginePicker,
+                        onPickEngine = ::startExploit,
+                        onDismissPicker = { pickerVisible.value = false },
+                        onRunCommand = ::runRootCommand
+                    )
+                },
             )
         }
 
+        if (consentAccepted.value) startMain()
+    }
+
+    /** 同意两份文件后：记住版本与时间，再启动主界面该做的事。 */
+    private fun acceptConsent() {
+        ConsentStore.accept(this)
+        consentAccepted.value = true
+        startMain()
+        beginLiveUpdates()
+    }
+
+    private fun startMain() {
         // 先填本机信息，避免卡片空着；连上 adbd 之后再用 ADB 的结果覆盖
         deviceInfo.value = DeviceInfo.fromLocal(this)
-
         refreshState()
-
         intent?.let { handleDebugPair(it) }
     }
 
-    override fun onResume() {
-        super.onResume()
+    /** 主界面存活期间的状态同步：每秒对齐一次 + 配对结果即时生效 + 自动直连一次。 */
+    private fun beginLiveUpdates() {
         refreshState()
         getSharedPreferences(PairingState.PREF_NAME, MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(pairingStateListener)
@@ -177,6 +206,13 @@ class MainActivity : AppCompatActivity() {
         maybeAutoConnect()
         refreshHandler.removeCallbacks(refreshTick)
         refreshHandler.postDelayed(refreshTick, 1000)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 未同意声明前不进主界面、不自动连接
+        if (!consentAccepted.value) return
+        beginLiveUpdates()
     }
 
     override fun onPause() {
@@ -248,29 +284,64 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 引擎选择：有精确匹配的内核 profile 就用 profile 引擎，否则退到 page cache 引擎
-     * （它只要求内核主次版本能对上随包的模块镜像）。
+     * What can actually run on this device right now. Single source of truth for card + picker.
+     *
+     * The picker lists vulnerabilities (CVE ids), not devices or payload variants: the payload for
+     * a given CVE is resolved from the device here, so one row covers every build of that bug.
      */
-    /** What can actually run on this device right now. Single source of truth for card + picker. */
-    private data class Availability(val profile: Boolean, val pageCache: String?)
+    private data class Availability(
+        val profile: Boolean,
+        val pageCache: String?,
+        val gpuMatched: Boolean,
+        val gpuPayload: GpuRunner.Payload?,
+        val pctMatched: Boolean,
+        val pctPayload: PctRunner.Payload?,
+    )
 
     private fun availability(info: DeviceInfo?): Availability {
         // No `connected.value` read here: this runs off the main thread too, where snapshot reads
         // can be stale. A non-null DeviceInfo already means the device answered.
-        if (info == null) return Availability(false, null)
+        if (info == null) return Availability(false, null, false, null, false, null)
         val profile = RootExploit.isPayloadPresent(this) && RootExploit.hasProfile(this, info.kernel)
         val pageCache = if (DirtyFragRunner.isPayloadPresent(this)) {
             DirtyFragRunner.describe(info.androidRelease, info.kernel)
         } else {
             null
         }
-        return Availability(profile, pageCache)
+        // A Qualcomm GPU is necessary but not sufficient: whether the firmware is patched is only
+        // known after a run, so the card reports Untested until ExploitMemory has an answer.
+        val gpuMatched = GpuRunner.isSupported(info)
+        val gpuPayload = GpuRunner.payloadFor(info)
+            ?.takeIf { GpuRunner.isPayloadPresent(this, it) }
+        // Same rule for CVE-2026-64560: the device family only says the port is worth trying, the
+        // payload's own `--preflight` decides whether this build is the ported one.
+        val pctMatched = PctRunner.isSupported(info)
+        val pctPayload = PctRunner.payloadFor(info)
+            ?.takeIf { PctRunner.isPayloadPresent(this, it) }
+        return Availability(profile, pageCache, gpuMatched, gpuPayload, pctMatched, pctPayload)
     }
 
     private fun resolveEngine(info: DeviceInfo): Pair<String?, SupportState> {
         val available = availability(info)
         if (available.profile) {
             return getString(R.string.engine_kernel_profile) to SupportState.Supported
+        }
+        // A matched device build is more specific than "this SoC has a GPU", so it comes first.
+        if (available.pctPayload != null) {
+            val state = when (ExploitMemory.result(this, info.kernel, ExploitMemory.ENGINE_PCT)) {
+                true -> SupportState.Supported
+                false -> SupportState.Unsupported
+                null -> SupportState.Candidate
+            }
+            return PctRunner.describe(info) to state
+        }
+        if (available.gpuPayload != null) {
+            val state = when (ExploitMemory.result(this, info.kernel, ExploitMemory.ENGINE_GPU)) {
+                true -> SupportState.Supported
+                false -> SupportState.Unsupported
+                null -> SupportState.Candidate
+            }
+            return GpuRunner.describe(info) to state
         }
         val label = available.pageCache ?: return null to SupportState.Unsupported
         // 没有 profile 时只能"能试"，是否真的能提权要跑过才知道
@@ -323,7 +394,7 @@ class MainActivity : AppCompatActivity() {
     /** 点击利用按钮：先让用户选引擎，再跑。 */
     private fun openEnginePicker() {
         if (exploiting.value) return
-        // 三种方案永远都列出来，能不能用由每一行自己说明
+        // 四个漏洞永远都列出来，能不能用由每一行自己说明
         exploitChoices.value = buildChoices(deviceInfo.value)
         pickerVisible.value = true
     }
@@ -333,11 +404,16 @@ class MainActivity : AppCompatActivity() {
         val available = availability(info)
         val manager = ksudTarget.value
         val noConnection = info == null
+        val handoff = if (manager == null) {
+            "root command channel"
+        } else {
+            "starts ${manager.packageName}"
+        }
 
         return listOf(
             ExploitChoice(
-                id = ENGINE_PROFILE,
-                title = "GhostLock",
+                id = ENGINE_CVE_43499,
+                title = "CVE-2026-43499",
                 detail = when {
                     available.profile -> "Kernel profile for $kernel"
                     noConnection -> "Connect to adb first"
@@ -347,23 +423,34 @@ class MainActivity : AppCompatActivity() {
                 enabled = available.profile,
             ),
             ExploitChoice(
-                id = ENGINE_DIRTY_FRAG_KSU,
-                title = "DirtyFrag + KernelSU",
+                id = ENGINE_CVE_64560,
+                title = "CVE-2026-64560",
                 detail = when {
                     noConnection -> "Connect to adb first"
-                    available.pageCache == null -> "Kernel not covered by the module images"
-                    manager == null -> "No root manager with libksud.so"
-                    else -> "${available.pageCache} - starts ${manager.packageName}"
+                    !available.pctMatched -> "No ported build for this device"
+                    available.pctPayload == null -> "Payload not packaged for this ABI"
+                    else -> "Race, up to 32 attempts, SELinux stays off, $handoff"
                 },
-                enabled = available.pageCache != null && manager != null,
+                enabled = available.pctPayload != null,
             ),
             ExploitChoice(
-                id = ENGINE_DIRTY_FRAG_CMD,
-                title = "DirtyFrag + No-KSU mode",
+                id = ENGINE_CVE_21479,
+                title = "CVE-2025-21479",
+                detail = when {
+                    noConnection -> "Connect to adb first"
+                    !available.gpuMatched -> "GPU not supported"
+                    available.gpuPayload == null -> "Payload not packaged for this ABI"
+                    else -> "SELinux stays off, $handoff"
+                },
+                enabled = available.gpuPayload != null,
+            ),
+            ExploitChoice(
+                id = ENGINE_CVE_43284,
+                title = "CVE-2026-43284",
                 detail = when {
                     noConnection -> "Connect to adb first"
                     available.pageCache == null -> "Kernel not covered by the module images"
-                    else -> "${available.pageCache} - root command, no manager"
+                    else -> "${available.pageCache}, $handoff"
                 },
                 enabled = available.pageCache != null,
             ),
@@ -374,11 +461,26 @@ class MainActivity : AppCompatActivity() {
         pickerVisible.value = false
         if (exploiting.value) return
         val info = deviceInfo.value ?: return
-        if (engineId == ENGINE_PROFILE && !RootExploit.hasProfile(this, info.kernel)) return
-        if (engineId != ENGINE_PROFILE &&
-            !DirtyFragRunner.isSupported(info.androidRelease, info.kernel)
-        ) {
-            return
+        // The payload is resolved from the device, not from the row: one row per CVE.
+        val gpuPayload = if (engineId == ENGINE_CVE_21479) {
+            GpuRunner.payloadFor(info)?.takeIf { GpuRunner.isPayloadPresent(this, it) }
+        } else {
+            null
+        }
+        val pctPayload = if (engineId == ENGINE_CVE_64560) {
+            PctRunner.payloadFor(info)?.takeIf { PctRunner.isPayloadPresent(this, it) }
+        } else {
+            null
+        }
+        // CVE-2026-43284 hands off to a manager when one is installed, otherwise it keeps a root
+        // command channel; the page cache engine itself does not care which. Which one applies is
+        // decided after a fresh resolve inside the worker, not from the cached value.
+        when (engineId) {
+            ENGINE_CVE_43499 ->
+                if (!RootExploit.hasProfile(this, info.kernel)) return
+            ENGINE_CVE_64560 -> if (pctPayload == null) return
+            ENGINE_CVE_21479 -> if (gpuPayload == null) return
+            else -> if (!DirtyFragRunner.isSupported(info.androidRelease, info.kernel)) return
         }
 
         exploiting.value = true
@@ -387,16 +489,19 @@ class MainActivity : AppCompatActivity() {
         exploitProgress.value = 0f
         commandMode.value = false
         Thread({
-            // ksud 解析要走 ADB 扫 /data/app，放在工作线程里做，顺便把命令打进日志
-                val outcome = runCatching {
-                if (engineId == ENGINE_PROFILE) {
-                    val ksud = KsuManager.resolve(this, AdbConnectionManager.get(this), ::logLine)
-                    runProfileEngine(info, ksud)
-                } else {
-                    runPageCacheEngine(
+            // ksud 解析要走 ADB 扫 /data/app：放在工作线程里做一次，四个引擎共用，
+            // 顺便把扫描命令打进日志
+            val outcome = runCatching {
+                val ksud = KsuManager.resolve(this, AdbConnectionManager.get(this), ::logLine)
+                    ?.takeIf { it.packageName.isNotEmpty() }
+                when {
+                    engineId == ENGINE_CVE_43499 -> runProfileEngine(info, ksud)
+                    pctPayload != null -> runPctEngine(info, pctPayload, ksud)
+                    gpuPayload != null -> runGpuEngine(info, gpuPayload, ksud)
+                    else -> runPageCacheEngine(
                         info = info,
-                        ksud = ksudTarget.value,
-                        mode = if (engineId == ENGINE_DIRTY_FRAG_KSU) {
+                        ksud = ksud,
+                        mode = if (ksud != null) {
                             DirtyFragRunner.Mode.KERNEL_SU
                         } else {
                             DirtyFragRunner.Mode.ROOT_COMMAND
@@ -430,19 +535,75 @@ class MainActivity : AppCompatActivity() {
             manager = AdbConnectionManager.get(this),
             release = info.kernel,
             ksudPath = ksud?.ksudPath,
+            ksudPackage = ksud?.packageName,
             onLine = ::logLine,
             onProgress = ::reportProgress,
         )
         ExploitMemory.record(this, info.kernel, result.kernelSuLoaded)
         return when {
             result.kernelSuLoaded -> {
-                val managerPackage = result.managerPackage ?: ksud?.packageName
-                val opened = managerPackage != null && KsuManager.launchManager(this, managerPackage)
-                getString(if (opened) R.string.exploit_ksu_opened else R.string.exploit_ksu_loaded)
+                // The payload loads the module itself; the app only has to bring the manager up.
+                val opened = KsuManager.launchWithRetry(
+                    context = this,
+                    manager = AdbConnectionManager.get(this),
+                    packageName = ksud?.packageName.orEmpty(),
+                    log = ::logLine,
+                )
+                getString(if (opened) R.string.exploit_ksu_opened else R.string.exploit_ksu_manual)
             }
             result.exitCode == 0 -> getString(R.string.exploit_finished)
             else -> getString(R.string.exploit_exit_code, result.exitCode)
         }
+    }
+
+    /**
+     * Adreno GPU 引擎：载荷以 shell 身份跑在 ADB 通道里，拿到 root 后会把暂存的 bootstrap
+     * 作为子进程重新执行；bootstrap 再按 prefs 选择 late-load ksud 或起 root 命令通道。
+     */
+    private fun runGpuEngine(
+        info: DeviceInfo,
+        payload: GpuRunner.Payload,
+        ksud: KsuManager.Target?,
+    ): String {
+        val result = GpuRunner.run(
+            context = this,
+            manager = AdbConnectionManager.get(this),
+            payload = payload,
+            suManager = ksud,
+            onLine = ::logLine,
+            onProgress = ::reportProgress,
+        )
+        ExploitMemory.record(this, info.kernel, result.handoff.rooted, ExploitMemory.ENGINE_GPU)
+        return reportHandoff(ksud, result.handoff, result.exitCode)
+    }
+
+    /**
+     * posix-cpu-timers 引擎：载荷先跑 `--preflight` 确认指纹/内核确实是移植过的那个版本，再跑竞态；
+     * 拿到 root 后由载荷把 root 子进程交给暂存的 bootstrap，后续和其他引擎一样。
+     */
+    private fun runPctEngine(
+        info: DeviceInfo,
+        payload: PctRunner.Payload,
+        ksud: KsuManager.Target?,
+    ): String {
+        val result = PctRunner.run(
+            context = this,
+            manager = AdbConnectionManager.get(this),
+            payload = payload,
+            suManager = ksud,
+            onLine = ::logLine,
+            onProgress = ::reportProgress,
+        )
+        // A refusal before the race says nothing about the vulnerability, so it is not remembered.
+        if (!result.attempted) {
+            return if (result.buildMismatch) {
+                getString(R.string.exploit_profile_gate_failed)
+            } else {
+                getString(R.string.exploit_exit_code, result.exitCode)
+            }
+        }
+        ExploitMemory.record(this, info.kernel, result.handoff.rooted, ExploitMemory.ENGINE_PCT)
+        return reportHandoff(ksud, result.handoff, result.exitCode)
     }
 
     /** page cache 引擎：模块由内核加载，bootstrap/ksud 由 ADB 通道提前放到 /data/local/tmp。 */
@@ -461,16 +622,42 @@ class MainActivity : AppCompatActivity() {
             onLine = ::logLine,
             onProgress = ::reportProgress,
         )
-        ExploitMemory.record(this, info.kernel, result.rooted)
-        if (result.rooted && mode == DirtyFragRunner.Mode.ROOT_COMMAND) {
-            runOnUiThread { commandMode.value = true }
-            return getString(R.string.exploit_root_ready)
+        ExploitMemory.record(this, info.kernel, result.handoff.rooted)
+        return reportHandoff(ksud, result.handoff, result.exitCode)
+    }
+
+    /**
+     * Turns what `bootstrap` started into the status line and, when KernelSU is up, opens the
+     * manager. A root that exists but has no manager (or whose late-load failed) is reported as
+     * the command channel instead of being thrown away as "not vulnerable".
+     */
+    private fun reportHandoff(
+        ksud: KsuManager.Target?,
+        handoff: RootHandoff.Result,
+        exitCode: Int,
+    ): String {
+        logLine("<i> ${handoff.detail}")
+        return when (handoff.state) {
+            RootHandoff.State.KERNEL_SU -> {
+                val opened = KsuManager.launchWithRetry(
+                    context = this,
+                    manager = AdbConnectionManager.get(this),
+                    packageName = ksud?.packageName.orEmpty(),
+                    log = ::logLine,
+                )
+                getString(if (opened) R.string.exploit_ksu_opened else R.string.exploit_ksu_manual)
+            }
+            RootHandoff.State.COMMAND -> {
+                runOnUiThread { commandMode.value = true }
+                getString(R.string.exploit_root_ready)
+            }
+            RootHandoff.State.NONE ->
+                if (exitCode == 0) {
+                    getString(R.string.exploit_finished)
+                } else {
+                    getString(R.string.exploit_exit_code, exitCode)
+                }
         }
-        if (result.rooted) {
-            val opened = ksud != null && KsuManager.launchManager(this, ksud.packageName)
-            return getString(if (opened) R.string.exploit_ksu_opened else R.string.exploit_ksu_loaded)
-        }
-        return getString(R.string.exploit_exit_code, result.exitCode)
     }
 
     /** 在 root 命令通道里执行一条命令，输出边跑边回显。 */

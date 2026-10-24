@@ -80,9 +80,9 @@ object DirtyFragRunner {
         return File(dir, PAYLOAD).isFile && File(dir, BOOTSTRAP).isFile
     }
 
-    /** Human readable engine name for the status card, e.g. `DirtyFrag (android15-6.6)`. */
+    /** Human readable engine name for the status card, e.g. `CVE-2026-43284 (android15-6.6)`. */
     fun describe(androidRelease: String, kernelRelease: String): String? =
-        selectKmi(androidRelease, kernelRelease)?.let { "DirtyFrag ($it)" }
+        selectKmi(androidRelease, kernelRelease)?.let { "CVE-2026-43284 ($it)" }
 
     fun isSupported(androidRelease: String, kernelRelease: String): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S_V2 &&
@@ -98,7 +98,7 @@ object DirtyFragRunner {
     }
 
     /** Outcome of one run. */
-    data class Result(val exitCode: Int, val rooted: Boolean)
+    data class Result(val exitCode: Int, val handoff: RootHandoff.Result)
 
     /**
      * Stages the helper files over ADB and runs the payload from the app process.
@@ -168,10 +168,12 @@ object DirtyFragRunner {
             }
             onProgress(0.9f)
             val exitCode = process.waitFor()
-            val rooted = File("/dev/df").exists()
+            // The kernel module execs `bootstrap`, so the outcome is whatever it started, not the
+            // stage marker the payload itself left behind. It runs asynchronously, so poll.
+            val handoff = RootHandoff.probe(manager, onLine, waitMs = 30_000)
 
             onProgress(1f)
-            return Result(exitCode, rooted)
+            return Result(exitCode, handoff)
         } finally {
             runCatching { transform.close() }
             runCatching { spi.close() }

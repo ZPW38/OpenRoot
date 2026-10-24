@@ -108,7 +108,7 @@ fun EnginePicker(
                 .padding(vertical = 18.dp, horizontal = 18.dp)
         ) {
             BasicText(
-                text = "Choose exploit",
+                text = "Select vulnerability",
                 style = TextStyle(
                     color = Color.White.copy(alpha = 0.95f),
                     fontSize = 19.sp,

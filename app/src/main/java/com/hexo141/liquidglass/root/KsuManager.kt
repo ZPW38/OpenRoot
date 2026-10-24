@@ -113,12 +113,68 @@ object KsuManager {
         return if (ksud.isFile) ksud.absolutePath else null
     }
 
+    /** Why the manager could not be brought to the foreground. */
+    enum class LaunchResult { OK, NO_PACKAGE, NO_INTENT, FAILED }
+
     /** Brings the manager to the foreground so the user can grant access or install modules. */
-    fun launchManager(context: Context, packageName: String): Boolean {
-        if (packageName.isEmpty()) return false
+    fun launchManager(context: Context, packageName: String): LaunchResult {
+        if (packageName.isEmpty()) return LaunchResult.NO_PACKAGE
         val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-            ?: return false
+            ?: return LaunchResult.NO_INTENT
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-        return runCatching { context.startActivity(intent) }.isSuccess
+        return if (runCatching { context.startActivity(intent) }.isSuccess) {
+            LaunchResult.OK
+        } else {
+            LaunchResult.FAILED
+        }
+    }
+
+    /**
+     * Opens the manager once the KernelSU module is really visible, and retries a few times.
+     *
+     * The `dfm6` marker only says `ksud late-load` returned 0; the module still has to appear in
+     * `/proc/modules` and the manager has to accept the launch. Every failed attempt is logged with
+     * its reason, so "root acquired but the manager did not open" is visible instead of silent.
+     */
+    fun launchWithRetry(
+        context: Context,
+        manager: AbsAdbConnectionManager?,
+        packageName: String,
+        log: (String) -> Unit = {},
+        attempts: Int = 3,
+        delayMs: Long = 1_000,
+    ): Boolean {
+        if (packageName.isEmpty()) {
+            log("<e> no manager package resolved; open KernelSU by hand")
+            return false
+        }
+        for (attempt in 1..attempts) {
+            if (manager != null && !moduleVisible(manager)) {
+                log("<i> waiting for kernelsu module (attempt $attempt/$attempts)")
+                Thread.sleep(delayMs)
+                continue
+            }
+            when (val result = launchManager(context, packageName)) {
+                LaunchResult.OK -> {
+                    log("<i> opened $packageName")
+                    return true
+                }
+                else -> log(
+                    "<e> cannot open $packageName: " +
+                        result.name.lowercase().replace('_', ' ') + " (attempt $attempt/$attempts)"
+                )
+            }
+            Thread.sleep(delayMs)
+        }
+        return false
+    }
+
+    /** {@code true} when `/proc/modules` lists kernelsu; unknown output does not block the launch. */
+    private fun moduleVisible(manager: AbsAdbConnectionManager): Boolean {
+        val output = runCatching {
+            AdbShell.exec(manager, "grep -c '^kernelsu ' /proc/modules 2>/dev/null")
+        }.getOrDefault("")
+        val count = output.trim().toIntOrNull() ?: return true
+        return count > 0
     }
 }

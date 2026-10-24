@@ -290,6 +290,11 @@ int main(void)
             }
         } else {
             touch("/dev/dfme2");
+            /* KernelSU refused to load, but the root we just got is still valid for this boot.
+             * Keep the command channel instead of throwing it away, so the user can run commands
+             * (and retry the late-load) by hand. */
+            run_root_command_daemon();
+            touch("/dev/dfm7");
         }
         _exit(0);
     }

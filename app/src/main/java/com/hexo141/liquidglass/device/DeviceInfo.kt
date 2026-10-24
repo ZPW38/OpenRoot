@@ -19,11 +19,17 @@ import java.io.File
 data class DeviceInfo(
     val deviceName: String,
     val chipset: String,
+    /** GPU model, e.g. "Adreno (TM) 730"; the GPU engine matches on this. */
+    val gpu: String,
     /** Raw release string, e.g. "15" — engines match on this. */
     val androidRelease: String,
     val androidVersion: String,
     val kernel: String,
     val selinux: String,
+    /** `ro.product.device` (e.g. "OP6113L1"); the CVE-2026-64560 payload gates on it. */
+    val codename: String = "Unknown",
+    /** `ro.build.fingerprint`; the CVE-2026-64560 payload only accepts one exact build. */
+    val fingerprint: String = "Unknown",
 ) {
     companion object {
         private const val UNKNOWN = "Unknown"
@@ -45,6 +51,10 @@ data class DeviceInfo(
             "getprop ro.build.version.sdk",
             "uname -r",
             "getenforce",
+            "cat /sys/class/kgsl/kgsl-3d0/gpu_model 2>/dev/null",
+            "getprop ro.hardware.egl",
+            "getprop ro.product.device",
+            "getprop ro.build.fingerprint",
         )
 
         private val COMMAND: String =
@@ -61,10 +71,13 @@ data class DeviceInfo(
             return DeviceInfo(
                 deviceName = deviceName(field(1), field(2)),
                 chipset = chipset(field(3), field(4), field(5), field(6)),
+                gpu = gpu(field(11), field(12)),
                 androidRelease = field(7),
                 androidVersion = androidVersion(field(7), field(8)),
                 kernel = field(9).ifEmpty { UNKNOWN },
                 selinux = field(10).ifEmpty { UNKNOWN },
+                codename = field(13).ifEmpty { UNKNOWN },
+                fingerprint = field(14).ifEmpty { UNKNOWN },
             )
         }
 
@@ -92,11 +105,24 @@ data class DeviceInfo(
                 deviceName = customName.ifEmpty { deviceName(manufacturer, model) },
                 chipset = chipset(socManufacturer, socModel,
                     Build.BOARD?.trim().orEmpty(), Build.HARDWARE?.trim().orEmpty()),
+                gpu = localGpu(),
                 androidRelease = Build.VERSION.RELEASE.orEmpty(),
                 androidVersion = androidVersion(Build.VERSION.RELEASE, Build.VERSION.SDK_INT.toString()),
                 kernel = System.getProperty("os.version")?.trim().orEmpty().ifEmpty { UNKNOWN },
                 selinux = localSelinux(),
+                codename = Build.DEVICE?.trim().orEmpty().ifEmpty { UNKNOWN },
+                fingerprint = Build.FINGERPRINT?.trim().orEmpty().ifEmpty { UNKNOWN },
             )
+        }
+
+        /** KGSL exposes the Adreno model here on Qualcomm devices. */
+        private fun localGpu(): String {
+            val gpu = runCatching {
+                File("/sys/class/kgsl/kgsl-3d0/gpu_model").readText().trim()
+            }.getOrNull().orEmpty()
+            return gpu.ifEmpty {
+                runCatching { Build.HARDWARE?.trim().orEmpty() }.getOrDefault("")
+            }.ifEmpty { UNKNOWN }
         }
 
         /** SELinux mode from selinuxfs: 1 = enforcing, 0 = permissive. */
@@ -130,6 +156,16 @@ data class DeviceInfo(
             model.isEmpty() -> UNKNOWN
             manufacturer.isEmpty() || model.startsWith(manufacturer, ignoreCase = true) -> model
             else -> "$manufacturer $model"
+        }
+
+        /**
+         * GPU label: KGSL's `gpu_model` is authoritative ("Adreno (TM) 730"), while
+         * `ro.hardware.egl` still says "adreno" on builds that hide the sysfs node.
+         */
+        private fun gpu(gpuModel: String, hardwareEgl: String): String = when {
+            gpuModel.isNotEmpty() && !gpuModel.equals(UNKNOWN, ignoreCase = true) -> gpuModel
+            hardwareEgl.isNotEmpty() && !hardwareEgl.equals(UNKNOWN, ignoreCase = true) -> hardwareEgl
+            else -> UNKNOWN
         }
 
         private fun chipset(

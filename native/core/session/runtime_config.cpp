@@ -88,6 +88,17 @@ static void runtime_config_init_paths(config::RuntimeConfig *config) {
         }
         config->ksud_path = std::move(escaped);
     }
+
+    /* Manager package for `ksud late-load --package-name`; escaped the same way. */
+    const char *pkg = getenv("GHOSTLOCK_KSU_PKG");
+    if (pkg && pkg[0]) {
+        std::string escaped;
+        for (const char *p = pkg; *p; p++) {
+            if (*p == '\'') escaped += "'\\''";
+            else escaped += *p;
+        }
+        config->ksu_package = std::move(escaped);
+    }
 }
 
 /* Capture all process environment and CPU/path choices exactly once. Input:
@@ -99,6 +110,7 @@ int32_t ghostlock::config::RuntimeConfig::init() {
     root_script_path.clear();
     ksu_log_path.clear();
     ksud_path.clear();
+    ksu_package.clear();
     debug_dir.clear();
 
     runtime_config_init_cpus(this);
@@ -112,4 +124,5 @@ void ghostlock::config::RuntimeConfig::log() const {
     pr_info("cpu pair: main=%d consumer=%d\n", main_cpu, consumer_cpu);
     pr_info("runtime home=%s script=%s\n", home_dir.c_str(),
             root_script_path.c_str());
+    pr_info("runtime ksud=%s pkg=%s\n", ksud_path.c_str(), ksu_package.c_str());
 }

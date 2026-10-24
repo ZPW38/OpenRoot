@@ -34,8 +34,11 @@ google-services.json
 # Android Profiling
 *.hprof
 
-# Native build outputs (produced by buildNativeExploit / buildNativePageCache)
+# Native build outputs (produced by buildNativeExploit / buildNativePageCache / buildNativeGpu /
+# buildNativePct)
 /native/**/*.o
 /native-or/*.o
 /native-or/splicehelper
+/native-gpu/**/*.o
+/native-pct/**/*.o
 /app/src/main/jniLibs/**/*.so
