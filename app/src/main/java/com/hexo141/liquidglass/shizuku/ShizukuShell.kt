@@ -101,9 +101,24 @@ class ShizukuShell : Shell {
         return runCatching { process.exitValue() }.isSuccess
     }
 
-    /** Starts one command through the Shizuku daemon. */
-    private fun start(command: String): Process =
-        Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
+    /**
+     * Starts one command through the Shizuku daemon.
+     *
+     * `Shizuku.newProcess` is private in the 13.x API even though it is the documented way to run
+     * a shell command with the privileges Shizuku already holds, so it is reached reflectively.
+     * The binder itself still enforces the permission, so this only bypasses `private`.
+     */
+    private fun start(command: String): Process {
+        val method = Shizuku::class.java.getDeclaredMethod(
+            "newProcess",
+            Array<String>::class.java,
+            Array<String>::class.java,
+            String::class.java,
+        )
+        method.isAccessible = true
+        val argv: Array<String> = arrayOf("sh", "-c", command)
+        return method.invoke(null, argv, null, null) as Process
+    }
 
     /** Copies a stream into [out] on a daemon thread. */
     private fun spool(input: java.io.InputStream, out: ByteArrayOutputStream): Thread =
