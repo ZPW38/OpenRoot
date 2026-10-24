@@ -1,7 +1,7 @@
 package com.hexo141.liquidglass.root
 
 import android.content.Context
-import com.hexo141.liquidglass.adb.AbsAdbConnectionManager
+import com.hexo141.liquidglass.adb.Shell
 import com.hexo141.liquidglass.adb.AdbShell
 import com.hexo141.liquidglass.device.DeviceInfo
 import java.io.File
@@ -97,7 +97,7 @@ object GpuRunner {
     @Throws(Exception::class)
     fun run(
         context: Context,
-        manager: AbsAdbConnectionManager,
+        shell: Shell,
         payload: Payload,
         suManager: KsuManager.Target?,
         onLine: (String) -> Unit,
@@ -112,20 +112,20 @@ object GpuRunner {
 
         onProgress(0.06f)
         onLine("$ mkdir -p $STAGE_DIR")
-        AdbShell.exec(manager, "mkdir -p $STAGE_DIR")
+        shell.exec, "mkdir -p $STAGE_DIR")
 
         onLine("$ cat > $STAGE_DIR/${payload.asset}")
-        AdbShell.push(manager, "$STAGE_DIR/${payload.asset}", payloadFile.readBytes())
+        shell.push, "$STAGE_DIR/${payload.asset}", payloadFile.readBytes())
         onProgress(0.2f)
         onLine("$ chmod 755 $STAGE_DIR/${payload.asset}")
-        AdbShell.exec(manager, "chmod 755 $STAGE_DIR/${payload.asset}")
+        shell.exec, "chmod 755 $STAGE_DIR/${payload.asset}")
 
         // The exploit re-execs this path as uid 0 once __do_sys_capset is restored.
         onLine("$ cat > $STAGE_DIR/$BOOTSTRAP_REMOTE")
-        AdbShell.push(manager, "$STAGE_DIR/$BOOTSTRAP_REMOTE", bootstrap.readBytes())
+        shell.push, "$STAGE_DIR/$BOOTSTRAP_REMOTE", bootstrap.readBytes())
         onProgress(0.3f)
         onLine("$ chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
-        AdbShell.exec(manager, "chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
+        shell.exec, "chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
 
         // Same preference contract the page-cache engine uses; "none" selects the root channel.
         val managerValue = suManager?.packageName.orEmpty().ifEmpty { "none" }
@@ -138,14 +138,13 @@ object GpuRunner {
             </map>
         """.trimIndent().toByteArray()
         onLine("$ cat > $STAGE_DIR/openroot.xml")
-        AdbShell.push(manager, "$STAGE_DIR/openroot.xml", prefs)
+        shell.push, "$STAGE_DIR/openroot.xml", prefs)
         onProgress(0.38f)
-        AdbShell.exec(manager, "chmod 644 $STAGE_DIR/openroot.xml")
+        shell.exec, "chmod 644 $STAGE_DIR/openroot.xml")
 
         if (suManager != null) {
             onLine("$ cp ${suManager.ksudPath} $STAGE_DIR/ksud")
-            val copy = AdbShell.exec(
-                manager,
+            val copy = shell.exec(
                 "cp '${suManager.ksudPath}' $STAGE_DIR/ksud && chmod 755 $STAGE_DIR/ksud && echo ok",
             )
             onProgress(0.46f)
@@ -159,8 +158,7 @@ object GpuRunner {
         onLine("$ cd $STAGE_DIR && ./${payload.asset} $STAGE_DIR/$BOOTSTRAP_REMOTE")
         // The payload copies a kernel image and prints progress while it does, so the idle
         // watchdog has to survive a long silent GPU read.
-        val exitCode = AdbShell.stream(
-            manager,
+        val exitCode = shell.stream(
             "cd $STAGE_DIR && TMPDIR=$STAGE_DIR HOME=$STAGE_DIR " +
                 "./${payload.asset} $STAGE_DIR/$BOOTSTRAP_REMOTE 2>&1",
             onLine,
@@ -169,7 +167,7 @@ object GpuRunner {
         onProgress(0.9f)
 
         // What bootstrap actually started, from the /dev markers it leaves behind.
-        val handoff = RootHandoff.probe(manager, onLine, waitMs = 20_000)
+        val handoff = RootHandoff.probe(shell, onLine, waitMs = 20_000)
         onProgress(1f)
         return Result(exitCode, handoff)
     }

@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.util.Log
-import com.hexo141.liquidglass.adb.AbsAdbConnectionManager
+import com.hexo141.liquidglass.adb.Shell
 import com.hexo141.liquidglass.adb.AdbShell
 import java.io.File
 
@@ -44,20 +44,20 @@ object KsuManager {
      */
     fun resolve(
         context: Context,
-        manager: AbsAdbConnectionManager? = null,
+        shell: Shell? = null,
         log: (String) -> Unit = {},
     ): Target? {
-        if (manager != null) {
-            resolveViaAdb(manager, log)?.let { return it }
+        if (shell != null) {
+            resolveViaAdb(shell, log)?.let { return it }
         }
         return resolveViaPackageManager(context, log)
     }
 
     /** `find /data/app` over ADB: works for forks and ignores package visibility rules. */
-    private fun resolveViaAdb(manager: AbsAdbConnectionManager, log: (String) -> Unit): Target? {
+    private fun resolveViaAdb(shell: Shell, log: (String) -> Unit): Target? {
         val findCommand = "find /data/app -name libksud.so -type f 2>/dev/null"
         log("$ $findCommand")
-        val found = runCatching { AdbShell.exec(manager, findCommand) }.getOrElse { error ->
+        val found = runCatching { shell.exec, findCommand) }.getOrElse { error ->
             log("<e> ${error.message}")
             return null
         }
@@ -71,7 +71,7 @@ object KsuManager {
         if (path == null) return null
 
         log("$ pm list packages")
-        val packages = runCatching { AdbShell.exec(manager, "pm list packages") }.getOrDefault("")
+        val packages = runCatching { shell.exec, "pm list packages") }.getOrDefault("")
         val packageName = packages.lineSequence()
             .map { it.removePrefix("package:").trim() }
             .filter { it.isNotEmpty() }
@@ -138,7 +138,7 @@ object KsuManager {
      */
     fun launchWithRetry(
         context: Context,
-        manager: AbsAdbConnectionManager?,
+        shell: Shell?,
         packageName: String,
         log: (String) -> Unit = {},
         attempts: Int = 3,
@@ -149,7 +149,7 @@ object KsuManager {
             return false
         }
         for (attempt in 1..attempts) {
-            if (manager != null && !moduleVisible(manager)) {
+            if (shell != null && !moduleVisible(shell)) {
                 log("<i> waiting for kernelsu module (attempt $attempt/$attempts)")
                 Thread.sleep(delayMs)
                 continue
@@ -170,9 +170,9 @@ object KsuManager {
     }
 
     /** {@code true} when `/proc/modules` lists kernelsu; unknown output does not block the launch. */
-    private fun moduleVisible(manager: AbsAdbConnectionManager): Boolean {
+    private fun moduleVisible(shell: Shell): Boolean {
         val output = runCatching {
-            AdbShell.exec(manager, "grep -c '^kernelsu ' /proc/modules 2>/dev/null")
+            shell.exec, "grep -c '^kernelsu ' /proc/modules 2>/dev/null")
         }.getOrDefault("")
         val count = output.trim().toIntOrNull() ?: return true
         return count > 0

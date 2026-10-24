@@ -1,17 +1,22 @@
 name: Android CI
 
+# Builds a directly installable debug-signed APK.
+#
+# Fork-friendly on purpose: the upstream release flow needs SIGNING_KEY / ALIAS /
+# KEY_STORE_PASSWORD / KEY_PASSWORD secrets, which a fresh fork does not have. A debug signature
+# is enough to sideload the app, so this workflow signs with the default debug keystore and uploads
+# the APK as an artifact — no secrets to configure.
+
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -34,48 +39,17 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    # 1. 获取北京时间日期并设置为环境变量
-    - name: Set version and date
-      run: |
-        DATE=$(TZ='Asia/Shanghai' date +'%Y%m%d')
-        echo "DATE=$DATE" >> $GITHUB_ENV
-        echo "VERSION=v$DATE" >> $GITHUB_ENV
-
-    # 2. 构建 Release APK（未签名）
-    - name: Build Release APK
-      run: ./gradlew assembleRelease
+    - name: Build debug APK
+      run: ./gradlew assembleDebug
       env:
         ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
-    # 3. 使用 r0adkll/sign-android-release 对 APK 签名
-    - name: Sign APK
-      id: sign_app
-      uses: r0adkll/sign-android-release@v1
-      with:
-        releaseDirectory: app/build/outputs/apk/release
-        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-        alias: ${{ secrets.ALIAS }}
-        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-        keyPassword: ${{ secrets.KEY_PASSWORD }}
-      env:
-        BUILD_TOOLS_VERSION: "34.0.0"
+    - name: Show APK
+      run: ls -la app/build/outputs/apk/debug/
 
-    # 4. 将签名后的 APK 重命名为 v年月日.apk
-    - name: Rename APK
-      run: |
-        mv ${{ steps.sign_app.outputs.signedReleaseFile }} app/build/outputs/apk/release/$VERSION.apk
-        echo "重命名完成，当前文件列表:"
-        ls -la app/build/outputs/apk/release/
-
-    # 5. 创建 GitHub Release 并上传已签名的 APK
-    - name: Create GitHub Release and Upload Assets
-      if: github.event_name == 'push'
-      uses: softprops/action-gh-release@v2
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: ${{ env.VERSION }}
-        name: ${{ env.VERSION }}
-        generate_release_notes: true
-        files: |
-          app/build/outputs/apk/release/${{ env.VERSION }}.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: OpenRoot-debug
+        path: app/build/outputs/apk/debug/*.apk
+        if-no-files-found: error

@@ -3,7 +3,7 @@ package com.hexo141.liquidglass.device
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
-import com.hexo141.liquidglass.adb.AbsAdbConnectionManager
+import com.hexo141.liquidglass.adb.Shell
 import com.hexo141.liquidglass.adb.AdbShell
 import java.io.File
 
@@ -63,8 +63,8 @@ data class DeviceInfo(
         // ---------------------------------------------------------------- over ADB
 
         @Throws(Exception::class)
-        fun fromAdb(manager: AbsAdbConnectionManager): DeviceInfo {
-            val output = AdbShell.exec(manager, COMMAND)
+        fun fromAdb(shell: Shell): DeviceInfo {
+            val output = shell.exec, COMMAND)
             val fields = output.split(MARKER).map { it.trim() }
             fun field(index: Int): String = fields.getOrNull(index).orEmpty()
 

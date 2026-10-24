@@ -186,6 +186,10 @@ dependencies {
     // TLSv1.3 exportKeyingMaterial without relying on hidden APIs
     implementation(libs.conscrypt.android)
 
+    // Optional shell backend: borrow a running Shizuku service (no socket, no pairing)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

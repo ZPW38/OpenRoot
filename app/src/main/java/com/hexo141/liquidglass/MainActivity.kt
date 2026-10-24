@@ -26,7 +26,11 @@ import com.hexo141.liquidglass.adb.AdbAuthenticationFailedException
 import com.hexo141.liquidglass.adb.AdbConnectionManager
 import com.hexo141.liquidglass.adb.AdbKeyManager
 import com.hexo141.liquidglass.adb.AdbPairingService
+import com.hexo141.liquidglass.adb.AdbShellAdapter
+import com.hexo141.liquidglass.adb.ConnectionMode
+import com.hexo141.liquidglass.adb.ConnectionSettings
 import com.hexo141.liquidglass.adb.PairingState
+import com.hexo141.liquidglass.adb.Shell
 import com.hexo141.liquidglass.consent.ConsentStore
 import com.hexo141.liquidglass.device.DeviceInfo
 import com.hexo141.liquidglass.root.DirtyFragRunner
@@ -41,9 +45,12 @@ import com.hexo141.liquidglass.ui.ConsentScreen
 import com.hexo141.liquidglass.ui.ConsentTransition
 import com.hexo141.liquidglass.ui.ExploitLogScreen
 import com.hexo141.liquidglass.ui.PageSlide
+import com.hexo141.liquidglass.shizuku.ShizukuBridge
+import com.hexo141.liquidglass.shizuku.ShizukuShell
 import com.hexo141.liquidglass.ui.PairingScreen
 import com.hexo141.liquidglass.ui.ExploitChoice
 import com.hexo141.liquidglass.ui.SupportState
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
 
@@ -58,6 +65,9 @@ class MainActivity : AppCompatActivity() {
 
         /** How long to wait for `_adb-tls-connect._tcp` before giving up on a direct connect. */
         const val CONNECT_TIMEOUT_MS = 6_000L
+
+        /** How long the plain TCP connect may take, including the on-device authorisation prompt. */
+        const val TCP_CONNECT_TIMEOUT_S = 45L
     }
 
     /** First start: the GPL-3.0 text and the temporary-root disclaimer must both be accepted. */
@@ -71,6 +81,15 @@ class MainActivity : AppCompatActivity() {
 
     /** A direct connect is in flight. */
     private val connecting = mutableStateOf(false)
+
+    /** How the app reaches a shell: wireless pairing, a plain TCP endpoint, or Shizuku. */
+    private val connectionMode = mutableStateOf(ConnectionMode.PAIRING)
+
+    /** `host:port` shown next to the TCP button. */
+    private val tcpEndpoint = mutableStateOf("127.0.0.1:5555")
+
+    /** Shizuku service running and this app allowed to use it. */
+    private val shizukuReady = mutableStateOf(false)
 
     /** adbd is connected. */
     private val connected = mutableStateOf(false)
@@ -116,6 +135,9 @@ class MainActivity : AppCompatActivity() {
 
     /** Auto-connect at most once per foreground entry, so a failure does not loop. */
     private var autoConnectTried = false
+
+    /** Persisted connection mode and TCP endpoint. */
+    private val settings by lazy { ConnectionSettings(this) }
 
     private val refreshHandler = Handler(Looper.getMainLooper())
 
@@ -172,6 +194,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         consentAccepted.value = ConsentStore.isAccepted(this)
+        connectionMode.value = settings.mode
+        tcpEndpoint.value = settings.endpoint()
 
         // Back closes the log page or the picker first, and only then leaves the app.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -212,7 +236,13 @@ class MainActivity : AppCompatActivity() {
                                 exploitStatus = exploitStatus.value,
                                 exploitChoices = exploitChoices.value,
                                 pickerVisible = pickerVisible.value,
+                                mode = connectionMode.value,
+                                tcpEndpoint = tcpEndpoint.value,
+                                shizukuReady = shizukuReady.value,
                                 onToggle = ::onPrimaryAction,
+                                onConnectTcp = { connect() },
+                                onConnectShizuku = ::connectShizuku,
+                                onSelectMode = ::setConnectionMode,
                                 onExploit = ::openEnginePicker,
                                 onPickEngine = ::startExploit,
                                 onDismissPicker = { pickerVisible.value = false },
@@ -249,6 +279,7 @@ class MainActivity : AppCompatActivity() {
     private fun startMain() {
         // Fill local device info first so the cards are never empty; ADB values replace it.
         deviceInfo.value = DeviceInfo.fromLocal(this)
+        shizukuReady.value = ShizukuBridge.isReady()
         refreshState()
         intent?.let { handleDebugPair(it) }
     }
@@ -281,7 +312,10 @@ class MainActivity : AppCompatActivity() {
     private fun refreshState() {
         pairingRunning.value = AdbPairingService.isRunning()
         paired.value = PairingState(this).isPaired
-        connected.value = AdbConnectionManager.isConnected()
+        connected.value = when (connectionMode.value) {
+            ConnectionMode.SHIZUKU -> ShizukuBridge.isReady()
+            else -> AdbConnectionManager.isConnected()
+        }
         if (!connected.value) {
             supportState.value = SupportState.NotConnected
             engineLabel.value = null
@@ -303,40 +337,128 @@ class MainActivity : AppCompatActivity() {
     private fun maybeAutoConnect() {
         if (autoConnectTried) return
         if (pairingRunning.value || connected.value || connecting.value) return
-        val isPaired = paired.value
-        if (!isPaired && !AdbKeyManager.hasStoredKey(this)) return
-        autoConnectTried = true
-        connect(silent = !isPaired)
+        when (connectionMode.value) {
+            // Nothing to pair: just try the stored endpoint or the running Shizuku service.
+            ConnectionMode.TCP, ConnectionMode.SHIZUKU -> {
+                autoConnectTried = true
+                connect(silent = true)
+            }
+            ConnectionMode.PAIRING -> {
+                val isPaired = paired.value
+                if (!isPaired && !AdbKeyManager.hasStoredKey(this)) return
+                autoConnectTried = true
+                connect(silent = !isPaired)
+            }
+        }
+    }
+
+    /** The command channel the payload runners should use for the selected mode. */
+    private fun currentShell(): Shell =
+        if (connectionMode.value == ConnectionMode.SHIZUKU) {
+            ShizukuShell()
+        } else {
+            AdbShellAdapter(AdbConnectionManager.get(this))
+        }
+
+    /**
+     * Plain `adb tcpip` endpoint. No pairing code is involved: adbd sends the ordinary
+     * "Allow USB debugging?" prompt on the device and the user accepts the key this app already
+     * holds. Because that prompt can take a while, a rejected first attempt must not abort.
+     */
+    private fun connectTcp(): Boolean {
+        val manager = AdbConnectionManager.get(this)
+        manager.setThrowOnUnauthorised(false)
+        manager.setTimeout(TCP_CONNECT_TIMEOUT_S, TimeUnit.SECONDS)
+        val ok = manager.connect(settings.tcpHost, settings.tcpPort)
+        manager.setTimeout(Long.MAX_VALUE, TimeUnit.MILLISECONDS)
+        return ok
+    }
+
+    /** Switches the transport and starts over with a clean state. */
+    private fun setConnectionMode(mode: ConnectionMode) {
+        if (mode == connectionMode.value || connecting.value) return
+        runCatching { AdbConnectionManager.get(this).disconnect() }
+        connected.value = false
+        supportState.value = SupportState.NotConnected
+        engineLabel.value = null
+        pickerVisible.value = false
+        needsPairing.value = false
+        autoConnectTried = false
+        settings.mode = mode
+        connectionMode.value = mode
+        tcpEndpoint.value = settings.endpoint()
+        shizukuReady.value = ShizukuBridge.isReady()
+        maybeAutoConnect()
+    }
+
+    /** Shizuku mode entry point: ask for the permission once, then connect. */
+    private fun connectShizuku() {
+        if (!ShizukuBridge.isAvailable()) {
+            toast(R.string.shizuku_not_running)
+            return
+        }
+        if (ShizukuBridge.hasPermission()) {
+            shizukuReady.value = true
+            connect()
+            return
+        }
+        ShizukuBridge.requestPermission { granted ->
+            runOnUiThread {
+                shizukuReady.value = ShizukuBridge.isReady()
+                if (granted) {
+                    connect()
+                } else {
+                    toast(R.string.shizuku_permission_denied)
+                }
+            }
+        }
     }
 
     private fun connect(silent: Boolean = false) {
         if (connecting.value) return
         connecting.value = true
         needsPairing.value = false
+        val mode = connectionMode.value
         Thread({
             val outcome = runCatching {
-                AdbConnectionManager.get(this).connectTls(this, CONNECT_TIMEOUT_MS)
+                when (mode) {
+                    ConnectionMode.TCP -> connectTcp()
+                    ConnectionMode.SHIZUKU -> ShizukuBridge.isReady()
+                    ConnectionMode.PAIRING -> {
+                        val manager = AdbConnectionManager.get(this)
+                        manager.setThrowOnUnauthorised(true)
+                        manager.connectTls(this, CONNECT_TIMEOUT_MS)
+                    }
+                }
             }
             runOnUiThread {
                 connecting.value = false
                 if (outcome.getOrNull() == true) {
                     connected.value = true
                     supportState.value = SupportState.Checking
-                    paired.value = true
-                    PairingState(this).isPaired = true
-                    Log.i(TAG, "connected without pairing code")
+                    if (mode == ConnectionMode.PAIRING) {
+                        paired.value = true
+                        PairingState(this).isPaired = true
+                    }
+                    Log.i(TAG, "connected in mode $mode")
                     loadDeviceInfo()
                 } else {
                     val error = outcome.exceptionOrNull()
-                    Log.w(TAG, "direct connect failed (silent=$silent)", error)
+                    Log.w(TAG, "connect failed in mode $mode (silent=$silent)", error)
                     if (silent) return@runOnUiThread
                     // adbd rejected our key: the pairing is really gone
                     if (error is AdbAuthenticationFailedException) {
                         PairingState(this).isPaired = false
                         paired.value = false
                     }
-                    needsPairing.value = true
-                    toast(R.string.adb_connect_failed_fallback)
+                    when (mode) {
+                        ConnectionMode.PAIRING -> {
+                            needsPairing.value = true
+                            toast(R.string.adb_connect_failed_fallback)
+                        }
+                        ConnectionMode.TCP -> toast(R.string.adb_tcp_connect_failed)
+                        ConnectionMode.SHIZUKU -> toast(R.string.shizuku_connect_failed)
+                    }
                 }
             }
         }, "adb-direct-connect").start()
@@ -416,7 +538,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadDeviceInfo() {
         if (!connected.value) return
         Thread({
-            val info = runCatching { DeviceInfo.fromAdb(AdbConnectionManager.get(this)) }
+            val info = runCatching { DeviceInfo.fromAdb(currentShell()) }
                 .onFailure { Log.w(TAG, "cannot read device info over adb", it) }
                 .getOrNull()
             if (info != null) {
@@ -430,7 +552,7 @@ class MainActivity : AppCompatActivity() {
                     engineLabel.value = engine
                     supportState.value = state
                 }
-                val ksud = KsuManager.resolve(this, AdbConnectionManager.get(this)) { line ->
+                val ksud = KsuManager.resolve(this, currentShell()) { line ->
                     Log.i(TAG, line)
                 }
                 runOnUiThread { ksudTarget.value = ksud }
@@ -440,8 +562,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun onPrimaryAction() {
         when {
-            pairingRunning.value -> stopPairing()
             connecting.value -> Unit // already busy
+            connectionMode.value != ConnectionMode.PAIRING -> connect()
+            pairingRunning.value -> stopPairing()
             else -> requestStart()
         }
     }
@@ -563,7 +686,7 @@ class MainActivity : AppCompatActivity() {
             // Resolving ksud scans /data/app over ADB: done once on this worker and shared by all
             // four engines, which also puts the scan itself in the log.
             val outcome = runCatching {
-                val ksud = KsuManager.resolve(this, AdbConnectionManager.get(this), ::logLine)
+                val ksud = KsuManager.resolve(this, currentShell(), ::logLine)
                     ?.takeIf { it.packageName.isNotEmpty() }
                 when {
                     engineId == ENGINE_CVE_43499 -> runProfileEngine(info, ksud)
@@ -603,7 +726,7 @@ class MainActivity : AppCompatActivity() {
     private fun runProfileEngine(info: DeviceInfo, ksud: KsuManager.Target?): String {
         val result = RootExploit.run(
             context = this,
-            manager = AdbConnectionManager.get(this),
+            shell = currentShell(),
             release = info.kernel,
             ksudPath = ksud?.ksudPath,
             ksudPackage = ksud?.packageName,
@@ -616,7 +739,7 @@ class MainActivity : AppCompatActivity() {
                 // The payload loads the module itself; the app only has to bring the manager up.
                 val opened = KsuManager.launchWithRetry(
                     context = this,
-                    manager = AdbConnectionManager.get(this),
+                    shell = currentShell(),
                     packageName = ksud?.packageName.orEmpty(),
                     log = ::logLine,
                 )
@@ -639,7 +762,7 @@ class MainActivity : AppCompatActivity() {
     ): String {
         val result = GpuRunner.run(
             context = this,
-            manager = AdbConnectionManager.get(this),
+            shell = currentShell(),
             payload = payload,
             suManager = ksud,
             onLine = ::logLine,
@@ -661,7 +784,7 @@ class MainActivity : AppCompatActivity() {
     ): String {
         val result = PctRunner.run(
             context = this,
-            manager = AdbConnectionManager.get(this),
+            shell = currentShell(),
             payload = payload,
             suManager = ksud,
             onLine = ::logLine,
@@ -687,7 +810,7 @@ class MainActivity : AppCompatActivity() {
     ): String {
         val result = DirtyFragRunner.run(
             context = this,
-            manager = AdbConnectionManager.get(this),
+            shell = currentShell(),
             androidRelease = info.androidRelease,
             kernelRelease = info.kernel,
             suManager = ksud,
@@ -714,7 +837,7 @@ class MainActivity : AppCompatActivity() {
             RootHandoff.State.KERNEL_SU -> {
                 val opened = KsuManager.launchWithRetry(
                     context = this,
-                    manager = AdbConnectionManager.get(this),
+                    shell = currentShell(),
                     packageName = ksud?.packageName.orEmpty(),
                     log = ::logLine,
                 )
@@ -738,7 +861,7 @@ class MainActivity : AppCompatActivity() {
         logLine("$ $command")
         Thread({
             runCatching {
-                RootShell.run(AdbConnectionManager.get(this), command) { line -> logLine(line) }
+                RootShell.run(currentShell(), command) { line -> logLine(line) }
             }.onFailure { error -> logLine("<e> ${error.message}") }
         }, "root-shell").start()
     }

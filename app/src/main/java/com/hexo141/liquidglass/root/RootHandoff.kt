@@ -1,6 +1,6 @@
 package com.hexo141.liquidglass.root
 
-import com.hexo141.liquidglass.adb.AbsAdbConnectionManager
+import com.hexo141.liquidglass.adb.Shell
 import com.hexo141.liquidglass.adb.AdbShell
 
 /**
@@ -36,7 +36,7 @@ object RootHandoff {
      * @param waitMs how long to keep polling while neither a module nor a channel is up
      */
     fun probe(
-        manager: AbsAdbConnectionManager,
+        shell: Shell,
         log: (String) -> Unit = {},
         waitMs: Long = 12_000,
     ): Result {
@@ -44,12 +44,12 @@ object RootHandoff {
         var markers: Set<String> = emptySet()
         var announced = false
         while (true) {
-            markers = readMarkers(manager, log)
+            markers = readMarkers(shell, log)
             if ("dfm6" in markers) {
                 return Result(State.KERNEL_SU, markers, "KernelSU module loaded")
             }
             if ("dfm7" in markers || "dfm1" in markers) {
-                if (channelAnswers(manager)) {
+                if (channelAnswers(shell)) {
                     val detail = if ("dfm7" in markers) {
                         "KernelSU late-load failed, root command channel is up"
                     } else {
@@ -78,11 +78,11 @@ object RootHandoff {
     }
 
     private fun readMarkers(
-        manager: AbsAdbConnectionManager,
+        shell: Shell,
         log: (String) -> Unit,
     ): Set<String> {
         log("$ $LIST_COMMAND")
-        val listing = runCatching { AdbShell.exec(manager, LIST_COMMAND) }.getOrDefault("")
+        val listing = runCatching { shell.exec, LIST_COMMAND) }.getOrDefault("")
         listing.trimEnd().lineSequence().filter { it.isNotBlank() }.forEach(log)
         return listing.lineSequence()
             .map { it.trim().substringAfterLast('/') }
@@ -91,8 +91,8 @@ object RootHandoff {
     }
 
     /** The daemon only counts as up if it answers a command with uid 0. */
-    private fun channelAnswers(manager: AbsAdbConnectionManager): Boolean =
-        runCatching { RootShell.run(manager, "id", timeoutMs = 2_500) }
+    private fun channelAnswers(shell: Shell): Boolean =
+        runCatching { RootShell.run(shell, "id", timeoutMs = 2_500) }
             .getOrDefault("")
             .contains("uid=0")
 

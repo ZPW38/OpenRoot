@@ -5,7 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -40,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hexo141.liquidglass.R
+import com.hexo141.liquidglass.adb.ConnectionMode
 import com.hexo141.liquidglass.device.DeviceInfo
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -75,6 +79,15 @@ fun PairingScreen(
     onPickEngine: (String) -> Unit,
     onDismissPicker: () -> Unit,
     onOpenLog: () -> Unit,
+    /** How the app reaches adbd: wireless pairing, a plain TCP endpoint, or Shizuku. */
+    mode: ConnectionMode,
+    /** `host:port` shown on the TCP button. */
+    tcpEndpoint: String,
+    /** Shizuku is running and this app holds its permission. */
+    shizukuReady: Boolean,
+    onConnectTcp: () -> Unit,
+    onConnectShizuku: () -> Unit,
+    onSelectMode: (ConnectionMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val backdrop = rememberLayerBackdrop()
@@ -231,22 +244,62 @@ fun PairingScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (showPairingButton) {
-                LiquidGlassButton(
-                    onClick = onToggle,
-                    backdrop = backdrop,
-                    surfaceColor = glassSurfaceColor,
-                    height = 50.dp,
-                    horizontalPadding = 22.dp
-                ) {
-                    BasicText(
-                        text = stringResource(
-                            if (running) R.string.adb_pairing_stop_button else R.string.adb_pairing_start
-                        ),
-                        style = buttonTextStyle()
-                    )
+            when (mode) {
+                // Plain `adb tcpip` endpoint: no pairing code, the device itself asks for the key.
+                ConnectionMode.TCP -> if (!connected) {
+                    LiquidGlassButton(
+                        onClick = onConnectTcp,
+                        backdrop = backdrop,
+                        surfaceColor = glassSurfaceColor,
+                        height = 50.dp,
+                        horizontalPadding = 22.dp
+                    ) {
+                        BasicText(
+                            text = if (connecting) "Connecting…" else "Connect $tcpEndpoint",
+                            style = buttonTextStyle()
+                        )
+                    }
+                }
+
+                // Borrow a running Shizuku service instead of opening a socket.
+                ConnectionMode.SHIZUKU -> if (!connected) {
+                    LiquidGlassButton(
+                        onClick = onConnectShizuku,
+                        backdrop = backdrop,
+                        surfaceColor = glassSurfaceColor,
+                        height = 50.dp,
+                        horizontalPadding = 22.dp
+                    ) {
+                        BasicText(
+                            text = when {
+                                connecting -> "Connecting…"
+                                shizukuReady -> "Connect through Shizuku"
+                                else -> "Grant Shizuku access"
+                            },
+                            style = buttonTextStyle()
+                        )
+                    }
+                }
+
+                ConnectionMode.PAIRING -> if (showPairingButton) {
+                    LiquidGlassButton(
+                        onClick = onToggle,
+                        backdrop = backdrop,
+                        surfaceColor = glassSurfaceColor,
+                        height = 50.dp,
+                        horizontalPadding = 22.dp
+                    ) {
+                        BasicText(
+                            text = stringResource(
+                                if (running) R.string.adb_pairing_stop_button else R.string.adb_pairing_start
+                            ),
+                            style = buttonTextStyle()
+                        )
+                    }
                 }
             }
+
+            ModeSwitcher(mode = mode, onSelect = onSelectMode)
         }
 
         EnginePicker(
@@ -313,3 +366,41 @@ private const val GITHUB_PATH =
         "C88.139,7415.37 88.726,7417.2 91.508,7416.58 C91.513,7417.437 91.522,7418.245 " +
         "91.522,7418.489 C91.522,7418.76 91.338,7419.077 90.839,7418.982 C86.865,7417.627 " +
         "84,7413.783 84,7409.253 C84,7403.59 88.478,7399 94,7399"
+
+/**
+ * Transport picker. Pairing is what Android 11+ offers natively; the plain TCP endpoint also works
+ * on Android 7-10 (where no pairing dialog exists), and Shizuku needs neither a code nor a port.
+ */
+@Composable
+private fun ModeSwitcher(
+    mode: ConnectionMode,
+    onSelect: (ConnectionMode) -> Unit,
+) {
+    val items = listOf(
+        ConnectionMode.PAIRING to "Pairing",
+        ConnectionMode.TCP to "TCP 5555",
+        ConnectionMode.SHIZUKU to "Shizuku",
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.forEach { (item, label) ->
+            val active = item == mode
+            BasicText(
+                text = label,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = if (active) 0.26f else 0.10f))
+                    .clickable { onSelect(item) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                style = TextStyle(
+                    color = Color.White.copy(alpha = if (active) 1f else 0.72f),
+                    fontSize = 12.sp,
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.45f),
+                        offset = Offset(0f, 1f),
+                        blurRadius = 6f
+                    )
+                )
+            )
+        }
+    }
+}

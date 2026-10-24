@@ -39,6 +39,12 @@
     <string name="adb_connect_connecting">Connecting…</string>
     <string name="adb_disconnect">Disconnect</string>
     <string name="adb_connect_failed_fallback">Direct connection failed, pair with a code</string>
+    <string name="adb_tcp_connect_failed">Cannot reach adb on the TCP endpoint (run "adb tcpip 5555" first)</string>
+
+    <!-- Shizuku: borrow an already authorized service -->
+    <string name="shizuku_not_running">Shizuku is not running</string>
+    <string name="shizuku_permission_denied">Shizuku access denied</string>
+    <string name="shizuku_connect_failed">Shizuku connection failed</string>
 
     <!-- Temporary root -->
     <string name="exploit_button">Exploit</string>
