@@ -53,4 +53,9 @@
     <string name="engine_kernel_profile">CVE-2026-43499</string>
     <string name="exploit_root_ready">Temporary root ready, type a command below</string>
     <string name="exploit_profile_gate_failed">This build is not the one the payload was ported to</string>
+
+    <!-- Bottom navigation -->
+    <string name="tab_home">Home</string>
+    <string name="tab_log">Log</string>
+    <string name="tab_about">About</string>
 </resources>

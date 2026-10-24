@@ -64,7 +64,7 @@ The APK contains the native payloads under `lib/arm64-v8a/` and every bundled ke
 - `buildNativePageCache` produces `libopenroot.so` and `libopenbootstrap.so` in `build/or`.
 - `buildNativeGpu` produces `libcheese-quest.so` and `libcheese-snapdragon.so` in `build/gpu`.
 - `buildNativePct` produces `libpct-opace6.so` in `build/pct`.
-- `prepareNativePayloads` is the only task that writes into `app/src/main/jniLibs/arm64-v8a/`.
+- `prepareNativePayloads` is the only task that writes into `app/src/main/jniLibs/`.
 - `stripNativePayloads` strips the packaged copies.
 
 To build the payloads by hand:

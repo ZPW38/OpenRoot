@@ -20,8 +20,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import com.hexo141.liquidglass.adb.AdbAuthenticationFailedException
 import com.hexo141.liquidglass.adb.AdbConnectionManager
 import com.hexo141.liquidglass.adb.AdbKeyManager
@@ -40,10 +38,12 @@ import com.hexo141.liquidglass.root.RootShell
 import com.hexo141.liquidglass.ui.ConsentScreen
 import com.hexo141.liquidglass.ui.ConsentTransition
 import com.hexo141.liquidglass.ui.ExploitLogScreen
-import com.hexo141.liquidglass.ui.PageSlide
+import com.hexo141.liquidglass.ui.AboutScreen
+import com.hexo141.liquidglass.ui.AppScaffold
 import com.hexo141.liquidglass.ui.PairingScreen
 import com.hexo141.liquidglass.ui.ExploitChoice
 import com.hexo141.liquidglass.ui.SupportState
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -58,6 +58,16 @@ class MainActivity : AppCompatActivity() {
 
         /** How long to wait for `_adb-tls-connect._tcp` before giving up on a direct connect. */
         const val CONNECT_TIMEOUT_MS = 6_000L
+
+        /**
+         * Reference width of the layout in dp. Bigger number = smaller UI (more dp per screen):
+         * 411 is a Pixel/OnePlus phone, 460 draws everything about 11% smaller.
+         */
+        const val DESIGN_WIDTH_DP = 460f
+
+        /** Density clamps, so neither a tiny nor a huge panel produces an unusable layout. */
+        const val MIN_UI_SCALE = 1.0f
+        const val MAX_UI_SCALE = 3.5f
     }
 
     /** First start: the GPL-3.0 text and the temporary-root disclaimer must both be accepted. */
@@ -102,8 +112,8 @@ class MainActivity : AppCompatActivity() {
     /** Whether the vulnerability picker is shown. */
     private val pickerVisible = mutableStateOf(false)
 
-    /** Whether the exploit log page is in front instead of the main screen. */
-    private val showLogPage = mutableStateOf(false)
+    /** Active bottom-bar tab: 0 home, 1 exploit log, 2 about. */
+    private val selectedTab = mutableStateOf(0)
 
     /** Vulnerabilities offered for the connected device. */
     private val exploitChoices = mutableStateOf<List<ExploitChoice>>(emptyList())
@@ -145,19 +155,28 @@ class MainActivity : AppCompatActivity() {
         }
 
     /**
-     * Ignores the user's "Display size" and "Font size" settings.
+     * Makes the layout measure the same on every device, ignoring "Display size" and "Font size".
      *
-     * The layout is designed for one density and a 1.0 font scale: with a larger display size the
-     * glass cards overlap and the log card loses its remaining height, and a larger font scale
-     * pushes the consent text and the device cards out of their frames. Both are normalised here,
-     * before any resource is loaded, so every dp/sp in the app is measured against the physical
-     * screen. The activity has no `configChanges`, so a system change recreates it and lands here
-     * again.
+     * The density is derived from the shortest screen side so the layout always spans
+     * [DESIGN_WIDTH_DP] dp: devices ship wildly different factory densities, and using the raw
+     * physical one made the cards look bloated on some of them and correct on others. Raising the
+     * design width is the single knob for the overall scale — a bigger number means more dp fit on
+     * the screen, i.e. smaller text, cards and paddings. It is clamped so a tiny or a huge panel
+     * does not end up unusable, and `fontScale` is pinned to 1.0 for the same reason.
+     *
+     * The activity has no `configChanges`, so a system change recreates it and lands here again.
      */
     override fun attachBaseContext(newBase: Context) {
         val config = Configuration(newBase.resources.configuration)
         config.fontScale = 1f
-        config.densityDpi = DisplayMetrics.DENSITY_DEVICE_STABLE
+
+        val metrics = newBase.resources.displayMetrics
+        val shortestSide = minOf(metrics.widthPixels, metrics.heightPixels)
+        if (shortestSide > 0) {
+            val scale = (shortestSide / DESIGN_WIDTH_DP).coerceIn(MIN_UI_SCALE, MAX_UI_SCALE)
+            config.densityDpi = (scale * DisplayMetrics.DENSITY_DEFAULT).roundToInt()
+        }
+
         super.attachBaseContext(newBase.createConfigurationContext(config))
     }
 
@@ -165,11 +184,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
-        }
+        // The wallpaper runs edge to edge; each screen pads its own content against
+        // WindowInsets.safeDrawing, so nothing sits under the status or navigation bar.
 
         consentAccepted.value = ConsentStore.isAccepted(this)
 
@@ -177,7 +193,7 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
-                    showLogPage.value -> showLogPage.value = false
+                    selectedTab.value != 0 -> selectedTab.value = 0
                     pickerVisible.value -> pickerVisible.value = false
                     else -> {
                         isEnabled = false
@@ -194,10 +210,10 @@ class MainActivity : AppCompatActivity() {
                 accepted = consentAccepted.value,
                 consent = { ConsentScreen(onAccept = ::acceptConsent) },
                 main = {
-                    // The exploit log is its own page, so it gets the whole screen.
-                    PageSlide(
-                        showSecond = showLogPage.value,
-                        first = {
+                    AppScaffold(
+                        selectedTab = selectedTab.value,
+                        onTabSelected = { selectedTab.value = it },
+                        home = { backdrop ->
                             PairingScreen(
                                 running = pairingRunning.value,
                                 paired = paired.value,
@@ -212,14 +228,15 @@ class MainActivity : AppCompatActivity() {
                                 exploitStatus = exploitStatus.value,
                                 exploitChoices = exploitChoices.value,
                                 pickerVisible = pickerVisible.value,
+                                backdrop = backdrop,
                                 onToggle = ::onPrimaryAction,
                                 onExploit = ::openEnginePicker,
                                 onPickEngine = ::startExploit,
                                 onDismissPicker = { pickerVisible.value = false },
-                                onOpenLog = { showLogPage.value = true },
+                                onOpenLog = { selectedTab.value = 1 },
                             )
                         },
-                        second = {
+                        log = { backdrop ->
                             ExploitLogScreen(
                                 lines = exploitLog.value,
                                 status = exploitStatus.value,
@@ -227,8 +244,11 @@ class MainActivity : AppCompatActivity() {
                                 commandMode = commandMode.value,
                                 running = exploiting.value,
                                 onCommand = ::runRootCommand,
-                                onBack = { showLogPage.value = false },
+                                backdrop = backdrop,
                             )
+                        },
+                        about = { backdrop ->
+                            AboutScreen(backdrop = backdrop)
                         },
                     )
                 },
@@ -557,8 +577,8 @@ class MainActivity : AppCompatActivity() {
         exploitStatus.value = null
         exploitProgress.value = 0f
         commandMode.value = false
-        // The log has its own page now: show it while the payload runs.
-        showLogPage.value = true
+        // The log is its own tab: show it while the payload runs.
+        selectedTab.value = 1
         Thread({
             // Resolving ksud scans /data/app over ADB: done once on this worker and shared by all
             // four engines, which also puts the scan itself in the log.
