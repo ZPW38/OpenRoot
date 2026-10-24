@@ -112,20 +112,20 @@ object GpuRunner {
 
         onProgress(0.06f)
         onLine("$ mkdir -p $STAGE_DIR")
-        shell.exec, "mkdir -p $STAGE_DIR")
+        shell.exec("mkdir -p $STAGE_DIR")
 
         onLine("$ cat > $STAGE_DIR/${payload.asset}")
-        shell.push, "$STAGE_DIR/${payload.asset}", payloadFile.readBytes())
+        shell.push("$STAGE_DIR/${payload.asset}", payloadFile.readBytes())
         onProgress(0.2f)
         onLine("$ chmod 755 $STAGE_DIR/${payload.asset}")
-        shell.exec, "chmod 755 $STAGE_DIR/${payload.asset}")
+        shell.exec("chmod 755 $STAGE_DIR/${payload.asset}")
 
         // The exploit re-execs this path as uid 0 once __do_sys_capset is restored.
         onLine("$ cat > $STAGE_DIR/$BOOTSTRAP_REMOTE")
-        shell.push, "$STAGE_DIR/$BOOTSTRAP_REMOTE", bootstrap.readBytes())
+        shell.push("$STAGE_DIR/$BOOTSTRAP_REMOTE", bootstrap.readBytes())
         onProgress(0.3f)
         onLine("$ chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
-        shell.exec, "chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
+        shell.exec("chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
 
         // Same preference contract the page-cache engine uses; "none" selects the root channel.
         val managerValue = suManager?.packageName.orEmpty().ifEmpty { "none" }
@@ -138,9 +138,9 @@ object GpuRunner {
             </map>
         """.trimIndent().toByteArray()
         onLine("$ cat > $STAGE_DIR/openroot.xml")
-        shell.push, "$STAGE_DIR/openroot.xml", prefs)
+        shell.push("$STAGE_DIR/openroot.xml", prefs)
         onProgress(0.38f)
-        shell.exec, "chmod 644 $STAGE_DIR/openroot.xml")
+        shell.exec("chmod 644 $STAGE_DIR/openroot.xml")
 
         if (suManager != null) {
             onLine("$ cp ${suManager.ksudPath} $STAGE_DIR/ksud")

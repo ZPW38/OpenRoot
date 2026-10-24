@@ -30,8 +30,8 @@ object RootShell {
         timeoutMs: Long = 60_000,
         onLine: (String) -> Unit = {},
     ): String {
-        shell.exec, "rm -f $CMD $OUT $DONE")
-        shell.push, CMD, command.toByteArray())
+        shell.exec("rm -f $CMD $OUT $DONE")
+        shell.push(CMD, command.toByteArray())
 
         val full = StringBuilder()
         val pending = StringBuilder()
@@ -40,7 +40,7 @@ object RootShell {
 
         while (System.currentTimeMillis() < deadline) {
             // Re-read the whole file and forward only what is new; the files are tiny.
-            val current = shell.exec, "cat $OUT 2>/dev/null")
+            val current = shell.exec("cat $OUT 2>/dev/null")
             if (current.length > full.length) {
                 val delta = current.substring(full.length)
                 full.append(delta)
@@ -53,7 +53,7 @@ object RootShell {
                 }
             }
 
-            val probe = shell.exec, "[ -f $DONE ] && echo yes || echo no")
+            val probe = shell.exec("[ -f $DONE ] && echo yes || echo no")
             if (probe.contains("yes")) {
                 finished = true
                 break
@@ -62,7 +62,7 @@ object RootShell {
         }
 
         // Anything written after the last poll (or without a trailing newline).
-        val tail = shell.exec, "cat $OUT 2>/dev/null")
+        val tail = shell.exec("cat $OUT 2>/dev/null")
         if (tail.length > full.length) {
             pending.append(tail.substring(full.length))
             full.setLength(0)
@@ -70,7 +70,7 @@ object RootShell {
         }
         if (pending.isNotEmpty()) onLine(pending.toString().trimEnd('\r', '\n'))
 
-        shell.exec, "rm -f $OUT $DONE $CMD")
+        shell.exec("rm -f $OUT $DONE $CMD")
         return if (finished) full.toString() else full.toString() + "\n[timeout after ${timeoutMs / 1000}s]"
     }
 }

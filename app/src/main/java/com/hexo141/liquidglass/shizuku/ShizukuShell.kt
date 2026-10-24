@@ -4,7 +4,6 @@ import com.hexo141.liquidglass.adb.Shell
 import rikka.shizuku.Shizuku
 import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 /**
  * [Shell] backed by a running Shizuku service.
@@ -22,9 +21,7 @@ class ShizukuShell : Shell {
             spool(process.inputStream, out),
             spool(process.errorStream, out),
         )
-        val finished = runCatching {
-            process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-        }.getOrDefault(false)
+        val finished = waitForExit(process, timeoutMs)
         if (!finished) {
             runCatching { process.destroy() }
         }
@@ -57,9 +54,11 @@ class ShizukuShell : Shell {
                 }
             }
             if (pending.isNotEmpty()) onLine(pending.toString().trimEnd('\r'))
-            exitCode = runCatching {
-                if (process.waitFor(5, TimeUnit.SECONDS)) process.exitValue() else -1
-            }.getOrDefault(-1)
+            exitCode = if (waitForExit(process, 5_000L)) {
+                runCatching { process.exitValue() }.getOrDefault(-1)
+            } else {
+                -1
+            }
         } finally {
             watchdog.stop()
             runCatching { process.destroy() }
@@ -74,8 +73,7 @@ class ShizukuShell : Shell {
                 stream.write(bytes)
                 stream.flush()
             }
-            val exitCode = process.waitFor(60, TimeUnit.SECONDS)
-            if (!exitCode) {
+            if (!waitForExit(process, 60_000L)) {
                 runCatching { process.destroy() }
                 throw IOException("Shizuku: writing $remotePath timed out")
             }
@@ -84,6 +82,23 @@ class ShizukuShell : Shell {
         } finally {
             runCatching { process.destroy() }
         }
+    }
+
+    /**
+     * Waits for [process] to end. Polls `exitValue()` because `waitFor(long, TimeUnit)` only
+     * exists from API 26 and this app supports API 24 upwards.
+     */
+    private fun waitForExit(process: Process, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (runCatching { process.exitValue() }.isSuccess) return true
+            try {
+                Thread.sleep(50)
+            } catch (_: InterruptedException) {
+                return false
+            }
+        }
+        return runCatching { process.exitValue() }.isSuccess
     }
 
     /** Starts one command through the Shizuku daemon. */

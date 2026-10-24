@@ -82,7 +82,7 @@ object RootHandoff {
         log: (String) -> Unit,
     ): Set<String> {
         log("$ $LIST_COMMAND")
-        val listing = runCatching { shell.exec, LIST_COMMAND) }.getOrDefault("")
+        val listing = runCatching { shell.exec(LIST_COMMAND) }.getOrDefault("")
         listing.trimEnd().lineSequence().filter { it.isNotBlank() }.forEach(log)
         return listing.lineSequence()
             .map { it.trim().substringAfterLast('/') }

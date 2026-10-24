@@ -197,12 +197,12 @@ object DirtyFragRunner {
         require(bootstrap.isFile) { "bootstrap is not packaged for this ABI" }
 
         onLine("$ mkdir -p $STAGE_DIR")
-        shell.exec, "mkdir -p $STAGE_DIR")
+        shell.exec("mkdir -p $STAGE_DIR")
         onLine("$ cat > $STAGE_DIR/$BOOTSTRAP_REMOTE")
-        shell.push, "$STAGE_DIR/$BOOTSTRAP_REMOTE", bootstrap.readBytes())
+        shell.push("$STAGE_DIR/$BOOTSTRAP_REMOTE", bootstrap.readBytes())
         onProgress(0.2f)
         onLine("$ chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
-        shell.exec, "chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
+        shell.exec("chmod 755 $STAGE_DIR/$BOOTSTRAP_REMOTE")
 
         // The daemon reads its settings from here; values match the app's own toggles.
         val managerValue = if (mode == Mode.KERNEL_SU) suManager?.packageName.orEmpty() else "none"
@@ -215,9 +215,9 @@ object DirtyFragRunner {
             </map>
         """.trimIndent().toByteArray()
         onLine("$ cat > $STAGE_DIR/openroot.xml")
-        shell.push, "$STAGE_DIR/openroot.xml", prefs)
+        shell.push("$STAGE_DIR/openroot.xml", prefs)
         onProgress(0.3f)
-        shell.exec, "chmod 644 $STAGE_DIR/openroot.xml")
+        shell.exec("chmod 644 $STAGE_DIR/openroot.xml")
 
         // libksud.so lives in the manager's native library dir, which the shell user can read.
         if (mode == Mode.KERNEL_SU && suManager != null) {

@@ -64,7 +64,7 @@ data class DeviceInfo(
 
         @Throws(Exception::class)
         fun fromAdb(shell: Shell): DeviceInfo {
-            val output = shell.exec, COMMAND)
+            val output = shell.exec(COMMAND)
             val fields = output.split(MARKER).map { it.trim() }
             fun field(index: Int): String = fields.getOrNull(index).orEmpty()
 

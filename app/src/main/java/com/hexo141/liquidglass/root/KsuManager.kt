@@ -57,7 +57,7 @@ object KsuManager {
     private fun resolveViaAdb(shell: Shell, log: (String) -> Unit): Target? {
         val findCommand = "find /data/app -name libksud.so -type f 2>/dev/null"
         log("$ $findCommand")
-        val found = runCatching { shell.exec, findCommand) }.getOrElse { error ->
+        val found = runCatching { shell.exec(findCommand) }.getOrElse { error ->
             log("<e> ${error.message}")
             return null
         }
@@ -71,7 +71,7 @@ object KsuManager {
         if (path == null) return null
 
         log("$ pm list packages")
-        val packages = runCatching { shell.exec, "pm list packages") }.getOrDefault("")
+        val packages = runCatching { shell.exec("pm list packages") }.getOrDefault("")
         val packageName = packages.lineSequence()
             .map { it.removePrefix("package:").trim() }
             .filter { it.isNotEmpty() }
@@ -172,7 +172,7 @@ object KsuManager {
     /** {@code true} when `/proc/modules` lists kernelsu; unknown output does not block the launch. */
     private fun moduleVisible(shell: Shell): Boolean {
         val output = runCatching {
-            shell.exec, "grep -c '^kernelsu ' /proc/modules 2>/dev/null")
+            shell.exec("grep -c '^kernelsu ' /proc/modules 2>/dev/null")
         }.getOrDefault("")
         val count = output.trim().toIntOrNull() ?: return true
         return count > 0
