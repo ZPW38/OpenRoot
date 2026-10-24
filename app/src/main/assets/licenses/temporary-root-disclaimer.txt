@@ -1,0 +1,88 @@
+OPENROOT — TEMPORARY ROOT DISCLAIMER AND TERMS OF USE
+
+PLEASE READ THIS DOCUMENT CAREFULLY BEFORE USING THIS APPLICATION. BY TAPPING
+"ACCEPT AND CONTINUE" YOU CONFIRM THAT YOU HAVE READ, UNDERSTOOD AND AGREED TO
+EVERY TERM BELOW. IF YOU DO NOT AGREE, DO NOT USE THIS APPLICATION AND UNINSTALL
+IT.
+
+1. WHAT THIS TOOL DOES
+
+   OpenRoot grants temporary root privileges (uid 0) on the device it is run
+   against, for the current boot session only. It does not unlock the bootloader,
+   does not flash or modify any partition, does not install a persistent root, does
+   not bypass any lock, account or activation mechanism, does not remove any
+   protection permanently, and provides no other capability of any kind. The root
+   obtained this way is lost when the device reboots. Nothing in this application
+   is a service, a warranty, or a promise that root will be obtained at all.
+
+2. YOUR OWN RISK
+
+   The payloads bundled with this application corrupt kernel memory on purpose.
+   Running them may cause, without limitation: kernel panic, unexpected reboots,
+   boot loops, data loss or corruption, application crashes, degraded performance,
+   battery drain, overheating, corrupted or unreadable storage, a device that no
+   longer boots, and a device that can no longer be recovered. Some payloads also
+   leave SELinux in permissive mode until the next reboot. You run this software
+   entirely at your own risk.
+
+3. NO WARRANTY; MANUFACTURER WARRANTY VOID
+
+   The software is provided "AS IS", without warranty of any kind, express or
+   implied, including but not limited to the warranties of merchantability,
+   fitness for a particular purpose, title and non-infringement. Running this
+   application will very likely void the manufacturer's, seller's or carrier's
+   warranty, may violate the terms of your device purchase, service plan or
+   insurance, and may make the device ineligible for repair or replacement. Any
+   resulting loss of warranty coverage, refusal of service, or denial of a repair
+   claim is borne by you alone.
+
+4. DEVICE DAMAGE, LOSS OF FUNCTION AND DATA LOSS
+
+   You accept sole responsibility for any damage to, or loss of function of, any
+   device, accessory, computer or data, however caused, including damage that
+   makes the device unusable, unbootable, unstable or unrepairable, and including
+   the loss of data, accounts, credentials, keys or licences. Back up your data
+   before use. No recovery assistance is offered.
+
+5. NO LIABILITY OF THE AUTHOR
+
+   To the maximum extent permitted by applicable law, the author, contributors,
+   maintainers and copyright holders of this application are not liable for any
+   direct, indirect, incidental, special, exemplary, consequential or punitive
+   damages, nor for any loss of data, revenue, profits, use, goodwill or business,
+   arising in any way out of the use of, or the inability to use, this
+   application, even if advised of the possibility of such damage. Where liability
+   cannot be excluded by law, it is limited to the amount you paid for this
+   application, which is zero.
+
+6. YOUR RESPONSIBILITY AND INDEMNITY
+
+   You are solely responsible for how you use this application and for complying
+   with all applicable laws, regulations, contracts and terms of service,
+   including the policies of your device manufacturer, carrier, insurer and
+   employer. You agree to indemnify and hold harmless the author and contributors
+   from any claim, demand, loss, liability, cost or expense (including reasonable
+   legal fees) arising from your use of this application or your breach of these
+   terms. Do not use this application on a device you do not own or are not
+   expressly authorised to modify.
+
+7. LAWFUL USE ONLY
+
+   This application is published for security research and for use on devices you
+   own or are explicitly authorised to test. Using it to gain access to a device
+   you do not own, or to circumvent a technical protection measure where doing so
+   is unlawful, is prohibited and is your act alone.
+
+8. NO SUPPORT
+
+   No support, update, fix, recovery instruction or compatibility guarantee is
+   provided. Kernels, firmware and devices change; a build that worked yesterday
+   may fail, hang or crash today.
+
+9. ACCEPTANCE
+
+   Tapping "ACCEPT AND CONTINUE" is your electronic signature and is evidence
+   that you have read and accepted this disclaimer in full. If any provision is
+   held unenforceable, the remaining provisions remain in force. These terms are
+   in addition to, and do not replace, the GNU General Public License v3.0 that
+   covers the source code of this application.
