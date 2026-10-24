@@ -51,6 +51,7 @@
     <string name="exploit_running">Exploiting…</string>
     <string name="exploit_needs_adb">Connect to ADB first</string>
     <string name="exploit_unsupported_kernel">No profile bundled for this kernel</string>
+    <string name="exploit_needs_android12l">This engine needs Android 12L (API 32) or newer</string>
     <string name="exploit_finished">Payload finished</string>
     <string name="exploit_exit_code">Payload exited with code %1$d</string>
     <string name="exploit_ksu_loaded">Temporary root acquired, KernelSU module loaded</string>

@@ -484,7 +484,12 @@ class MainActivity : AppCompatActivity() {
         // can be stale. A non-null DeviceInfo already means the device answered.
         if (info == null) return Availability(false, null, false, null, false, null)
         val profile = RootExploit.isPayloadPresent(this) && RootExploit.hasProfile(this, info.kernel)
-        val pageCache = if (DirtyFragRunner.isPayloadPresent(this)) {
+        // The page cache engine is refused below Android 12L (API 32) even when a module image
+        // matches the kernel, so it must not be offered there either - otherwise the row says
+        // "Run" and the tap is silently dropped.
+        val pageCache = if (DirtyFragRunner.isPayloadPresent(this) &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S_V2
+        ) {
             DirtyFragRunner.describe(info.androidRelease, info.kernel)
         } else {
             null
@@ -636,6 +641,8 @@ class MainActivity : AppCompatActivity() {
                 title = "CVE-2026-43284",
                 detail = when {
                     noConnection -> "Connect to adb first"
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2 ->
+                        "Needs Android 12L (API 32) or newer"
                     available.pageCache == null -> "Kernel not covered by the module images"
                     else -> "${available.pageCache}, $handoff"
                 },
@@ -672,7 +679,16 @@ class MainActivity : AppCompatActivity() {
                 if (!RootExploit.hasProfile(this, info.kernel)) return
             ENGINE_CVE_64560 -> if (pctPayload == null) return
             ENGINE_CVE_21479 -> if (gpuPayload == null) return
-            else -> if (!DirtyFragRunner.isSupported(info.androidRelease, info.kernel)) return
+            else -> if (!DirtyFragRunner.isSupported(info.androidRelease, info.kernel)) {
+                toast(
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2) {
+                        R.string.exploit_needs_android12l
+                    } else {
+                        R.string.exploit_unsupported_kernel
+                    }
+                )
+                return
+            }
         }
 
         exploiting.value = true
