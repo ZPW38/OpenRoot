@@ -269,8 +269,9 @@ class AdbPairingService : Service() {
                 mainHandler.post {
                     pairing = false
                     notify(ID_RESULT, succeedNotification())
-                    // adbd 已经收下公钥，配对完成后不必再常驻监听：收掉前台通知并结束服务，
-                    // 主界面会立刻把配对按钮收起来，之后直接走无码直连。
+                    // adbd has taken the public key, so there is nothing left to listen for: drop
+                    // the foreground notification and stop. The main screen hides the pairing
+                    // button and reconnects directly from then on.
                     stopDiscovery()
                     NotificationManagerCompat.from(this).cancel(ID_FOREGROUND)
                     stopForegroundSafe()

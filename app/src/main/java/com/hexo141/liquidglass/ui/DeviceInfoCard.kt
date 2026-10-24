@@ -151,14 +151,15 @@ private fun InfoTile(
                     if (surfaceColor.isSpecified) {
                         drawRect(surfaceColor)
                     }
-                    // 壁纸很亮时纯折射会看不清字，压一层很淡的暗色再叠高光
+                    // On a bright wallpaper pure refraction washes the text out: add a faint dark
+                    // layer under the highlight.
                     drawRect(Color.Black.copy(alpha = 0.22f))
                     drawRect(Color.White.copy(alpha = 0.08f))
                 }
             )
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // 大号标签 + 小号取值，和系统设置里的分组标题一个观感
+        // Large label, small value: the same hierarchy as a settings group header.
         BasicText(
             text = label,
             style = TextStyle(

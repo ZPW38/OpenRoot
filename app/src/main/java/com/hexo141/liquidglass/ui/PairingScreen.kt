@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hexo141.liquidglass.R
@@ -44,14 +45,15 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 /**
- * 主界面：整屏壁纸 + 设备信息玻璃卡片 + 居中的液态玻璃按钮。
+ * Main screen: full-screen wallpaper, the device cards and the centred liquid glass buttons.
  *
- * 壁纸同时是玻璃的折射源（和 E:\AndroidLiquidGlass 目录示例用照片一样），
- * 所以整屏是一个 ComposeView：壁纸走 `layerBackdrop`，按钮叠在上面做折射。
+ * The wallpaper doubles as the refraction source for the glass, so the whole screen is one
+ * ComposeView: the image is drawn through `layerBackdrop` and everything on top refracts it.
  *
- * 配对成功后 adbd 已经存了我们的公钥，配对按钮就完全收起（[paired] 为 true 且没有
- * [needsPairing]），主界面只负责直连和展示设备信息；只有直连失败时按钮才会重新出现。
- * 连接建立后下方的 Exploit 按钮负责跑临时 root 载荷。
+ * After a successful pairing adbd already holds our public key, so the pairing button is hidden
+ * entirely ([paired] true and no [needsPairing]); the screen only reconnects and shows the device.
+ * The button comes back only when a direct connect fails. Once connected, **Exploit** below runs a
+ * temporary root payload.
  */
 @Composable
 fun PairingScreen(
@@ -66,28 +68,27 @@ fun PairingScreen(
     exploiting: Boolean,
     exploitLog: List<String>,
     exploitStatus: String?,
-    exploitProgress: Float,
     exploitChoices: List<ExploitChoice>,
     pickerVisible: Boolean,
-    commandMode: Boolean,
     onToggle: () -> Unit,
     onExploit: () -> Unit,
     onPickEngine: (String) -> Unit,
     onDismissPicker: () -> Unit,
-    onRunCommand: (String) -> Unit,
+    onOpenLog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val backdrop = rememberLayerBackdrop()
 
-    // 旋转/分屏后配置变了要重新取图，否则横屏还是竖屏那张壁纸
+    // Reload the image when the configuration changes, or landscape keeps the portrait wallpaper.
     val configuration = LocalConfiguration.current
 
-    // API < 31 没有 RenderEffect，折射不生效；补一层半透明底，避免按钮在壁纸上几乎看不见
+    // API < 31 has no RenderEffect, so refraction does nothing; a translucent surface keeps the
+    // buttons readable on the wallpaper.
     val glassSurfaceColor =
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) Color.Black.copy(alpha = 0.3f)
         else Color.Unspecified
 
-    // 已配对后配对按钮一律收起；只有直连失败（needsPairing）才重新露出来
+    // Hidden once paired; only a failed direct connect (needsPairing) brings it back.
     val showPairingButton = !paired || needsPairing
 
     val statusText = when {
@@ -113,7 +114,7 @@ fun PairingScreen(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxSize()
-                // 状态栏之后留出足够的呼吸空间，标题和卡片都往下走一点
+                // Leave room below the status bar so the title and cards sit lower.
                 .padding(start = 20.dp, end = 20.dp, top = 44.dp, bottom = 20.dp)
         ) {
             Row(
@@ -156,7 +157,7 @@ fun PairingScreen(
                 engineLabel = engineLabel,
                 surfaceColor = glassSurfaceColor
             )
-            // 没连上就没有可信的设备信息，整块卡片不显示
+            // Without a connection there is no trustworthy device info, so the cards stay hidden.
             if (connected && deviceInfo != null) {
                 Spacer(Modifier.height(10.dp))
                 DeviceInfoCards(
@@ -166,42 +167,63 @@ fun PairingScreen(
                     surfaceColor = glassSurfaceColor
                 )
             }
-            // 利用按钮一直显示：不支持时点开也能看到有哪些方案、以及为什么不可用
-            Spacer(Modifier.height(14.dp))
-            LiquidGlassButton(
-                onClick = onExploit,
-                backdrop = backdrop,
-                tint = ExploitBlue,
-                surfaceColor = glassSurfaceColor,
-                height = 46.dp,
-                horizontalPadding = 22.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                BasicText(
-                    text = stringResource(
-                        if (exploiting) R.string.exploit_running else R.string.exploit_button
-                    ),
-                    style = buttonTextStyle()
-                )
-            }
-            // 日志拿走剩下的高度：区域固定、内容在卡片内部滚动，永远顶不出屏幕
-            if (exploitLog.isNotEmpty() || exploitStatus != null) {
-                Spacer(Modifier.height(10.dp))
-                ExploitLogCard(
+            // Exploit appears only once adbd is paired and connected; without a connection the
+            // payload cannot even be pushed.
+            if (connected) {
+                Spacer(Modifier.height(14.dp))
+                LiquidGlassButton(
+                    onClick = onExploit,
                     backdrop = backdrop,
-                    lines = exploitLog,
-                    status = exploitStatus,
+                    tint = ExploitBlue,
                     surfaceColor = glassSurfaceColor,
-                    commandInput = commandMode,
-                    onCommand = onRunCommand,
-                    progress = exploitProgress,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                )
-            } else {
-                Spacer(Modifier.weight(1f))
+                    height = 46.dp,
+                    horizontalPadding = 22.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    BasicText(
+                        text = stringResource(
+                            if (exploiting) R.string.exploit_running else R.string.exploit_button
+                        ),
+                        style = buttonTextStyle()
+                    )
+                }
             }
+            // The log lives on its own page; this is only the way in (and the last status line).
+            if (connected && (exploiting || exploitLog.isNotEmpty() || exploitStatus != null)) {
+                Spacer(Modifier.height(10.dp))
+                LiquidGlassButton(
+                    onClick = onOpenLog,
+                    backdrop = backdrop,
+                    surfaceColor = glassSurfaceColor,
+                    height = 46.dp,
+                    horizontalPadding = 22.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    BasicText(
+                        text = if (exploiting) "Exploit running - open log" else "Open exploit log",
+                        style = buttonTextStyle()
+                    )
+                }
+                if (exploitStatus != null) {
+                    Spacer(Modifier.height(6.dp))
+                    BasicText(
+                        text = exploitStatus,
+                        style = TextStyle(
+                            color = Color.White.copy(alpha = 0.78f),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = 0.45f),
+                                offset = Offset(0f, 1f),
+                                blurRadius = 6f
+                            )
+                        ),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.weight(1f))
         }
 
         Column(
@@ -243,7 +265,7 @@ fun PairingScreen(
 private fun buttonTextStyle() = TextStyle(
     color = Color.White,
     fontSize = 15.sp,
-    // 壁纸明暗不定，加一层淡阴影保证可读
+    // The wallpaper varies in brightness, so a soft shadow keeps the text readable.
     shadow = Shadow(
         color = Color.Black.copy(alpha = 0.45f),
         offset = Offset(0f, 1f),
@@ -251,7 +273,7 @@ private fun buttonTextStyle() = TextStyle(
     )
 )
 
-/** 利用按钮的强调色。 */
+/** Accent colour of the Exploit button. */
 private val ExploitBlue = Color(0xFF0A84FF)
 
 /** Repository link shown next to the title. */

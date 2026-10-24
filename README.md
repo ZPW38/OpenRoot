@@ -86,7 +86,8 @@ make -C native-pct payload      # writes build/pct/libpct-opace6.so
    notification. Once it succeeds, the pairing button is hidden.
 4. From then on the app connects by itself. The status card shows `Supported`, `Untested` or
    `Unsupported` for the connected device.
-5. Tap **Exploit** to open the engine picker. It lists four CVE ids; a row explains why it cannot
+5. Once connected, **Exploit** appears above the log area (it stays hidden until adbd is paired and
+   connected). Tap it to open the engine picker. It lists four CVE ids; a row explains why it cannot
    run (no profile for this kernel, no ported build, GPU not supported, kernel not covered by the
    module images, payload not packaged for this ABI). The payload that fits the connected device is
    chosen after the row is picked. The native log is shown at the bottom of the screen.
@@ -150,7 +151,8 @@ To add a device:
    derived from the device's own `boot.img` (or a full OTA package) for that build.
 3. Save the file as `app/src/main/assets/kernel_profiles/<release>.bin`, for example
    `app/src/main/assets/kernel_profiles/6.1.138-android14-11-g0c3d559bcd85-ab14529422.bin`.
-4. Rebuild and install. The status card switches to `Supported` and the **Exploit** button appears.
+4. Rebuild and install. The status card switches to `Supported`; **Exploit** is available as soon
+   as the device is connected.
 5. Run it once and watch the log. A profile with wrong offsets usually fails early with a read or
    lookup error instead of gaining root; treat a new profile as unverified until a run succeeds.
 

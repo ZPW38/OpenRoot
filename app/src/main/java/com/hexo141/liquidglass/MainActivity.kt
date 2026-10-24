@@ -1,15 +1,19 @@
 package com.hexo141.liquidglass
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.DisplayMetrics
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -35,6 +39,8 @@ import com.hexo141.liquidglass.root.RootHandoff
 import com.hexo141.liquidglass.root.RootShell
 import com.hexo141.liquidglass.ui.ConsentScreen
 import com.hexo141.liquidglass.ui.ConsentTransition
+import com.hexo141.liquidglass.ui.ExploitLogScreen
+import com.hexo141.liquidglass.ui.PageSlide
 import com.hexo141.liquidglass.ui.PairingScreen
 import com.hexo141.liquidglass.ui.ExploitChoice
 import com.hexo141.liquidglass.ui.SupportState
@@ -54,63 +60,66 @@ class MainActivity : AppCompatActivity() {
         const val CONNECT_TIMEOUT_MS = 6_000L
     }
 
-    /** 首次启动必须同意两份文件（GPL-3.0 + 临时 root 声明）；false 时只显示声明页 */
+    /** First start: the GPL-3.0 text and the temporary-root disclaimer must both be accepted. */
     private val consentAccepted = mutableStateOf(false)
 
-    /** 配对服务是否在运行；用 Compose 状态保存，按钮文案自动跟着变 */
+    /** Whether the pairing service runs; Compose state so the button label follows it. */
     private val pairingRunning = mutableStateOf(false)
 
-    /** 已经配对过（adbd 里存着我们的公钥），不需要再输配对码 */
+    /** Already paired: adbd holds our public key, so no pairing code is needed. */
     private val paired = mutableStateOf(false)
 
-    /** 正在直连中 */
+    /** A direct connect is in flight. */
     private val connecting = mutableStateOf(false)
 
-    /** 已连上 adbd */
+    /** adbd is connected. */
     private val connected = mutableStateOf(false)
 
-    /** 直连失败后重新露出配对按钮，让用户决定是否用配对码再配一次 */
+    /** Direct connect failed: show the pairing button again so a code can be used. */
     private val needsPairing = mutableStateOf(false)
 
-    /** 设备信息：先用本机属性铺底，连上 adbd 后再换成 ADB 查询到的值 */
+    /** Device info: local props first, replaced by the values read over ADB once connected. */
     private val deviceInfo = mutableStateOf<DeviceInfo?>(null)
 
-    /** 设备支持状态（状态卡直接用它） */
+    /** Support state, used directly by the status card. */
     private val supportState = mutableStateOf(SupportState.NotConnected)
 
-    /** 可用引擎的 CVE 编号；null 表示没有能跑的漏洞 */
+    /** CVE id of the engine in use; null when nothing can run here. */
     private val engineLabel = mutableStateOf<String?>(null)
 
-    /** 临时 root 载荷正在运行 */
+    /** A temporary-root payload is running. */
     private val exploiting = mutableStateOf(false)
 
-    /** 载荷的实时输出 */
+    /** Live payload output. */
     private val exploitLog = mutableStateOf<List<String>>(emptyList())
 
-    /** 载荷结束后的结果行 */
+    /** Result line after the payload ends. */
     private val exploitStatus = mutableStateOf<String?>(null)
 
-    /** 进度条：由载荷真实阶段驱动，0..1 */
+    /** Progress bar, driven by the payload's real stages, 0..1. */
     private val exploitProgress = mutableStateOf(0f)
 
-    /** 引擎选择层是否显示 */
+    /** Whether the vulnerability picker is shown. */
     private val pickerVisible = mutableStateOf(false)
 
-    /** 当前设备可选的引擎 */
+    /** Whether the exploit log page is in front instead of the main screen. */
+    private val showLogPage = mutableStateOf(false)
+
+    /** Vulnerabilities offered for the connected device. */
     private val exploitChoices = mutableStateOf<List<ExploitChoice>>(emptyList())
 
-    /** 找到的 root 管理器（含 ksud 路径），没装则为 null */
+    /** Resolved root manager (with its ksud path); null when none is installed. */
     private val ksudTarget = mutableStateOf<KsuManager.Target?>(null)
 
-    /** root 命令通道是否可用（bootstrap 已经起来） */
+    /** Root command channel available (bootstrap came up). */
     private val commandMode = mutableStateOf(false)
 
-    /** 每次进入前台只自动直连一次，避免失败后反复重试 */
+    /** Auto-connect at most once per foreground entry, so a failure does not loop. */
     private var autoConnectTried = false
 
     private val refreshHandler = Handler(Looper.getMainLooper())
 
-    /** 配对服务在后台跑的时候，每秒对齐一次状态（通知栏里配对成功也会立刻反映到页面）。 */
+    /** While pairing runs in the background, align the state once a second. */
     private val refreshTick = object : Runnable {
         override fun run() {
             refreshState()
@@ -123,17 +132,34 @@ class MainActivity : AppCompatActivity() {
             if (granted) startPairing() else toast(R.string.adb_pairing_permission_needed)
         }
 
-    /** 配对服务在后台把 isPaired 写成 true 时，主界面立即把配对按钮收起来。 */
+    /** Hide the pairing button as soon as the service writes isPaired = true. */
     private val pairingStateListener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == PairingState.KEY_PAIRED) {
                 val isPaired = PairingState(this).isPaired
                 paired.value = isPaired
                 if (isPaired) needsPairing.value = false
-                // 服务在配对成功后停止，这里立刻对齐，别等下一次轮询
+                // The service stops after a successful pairing: align now, do not wait for the tick.
                 pairingRunning.value = AdbPairingService.isRunning()
             }
         }
+
+    /**
+     * Ignores the user's "Display size" and "Font size" settings.
+     *
+     * The layout is designed for one density and a 1.0 font scale: with a larger display size the
+     * glass cards overlap and the log card loses its remaining height, and a larger font scale
+     * pushes the consent text and the device cards out of their frames. Both are normalised here,
+     * before any resource is loaded, so every dp/sp in the app is measured against the physical
+     * screen. The activity has no `configChanges`, so a system change recreates it and lands here
+     * again.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        val config = Configuration(newBase.resources.configuration)
+        config.fontScale = 1f
+        config.densityDpi = DisplayMetrics.DENSITY_DEVICE_STABLE
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -147,33 +173,63 @@ class MainActivity : AppCompatActivity() {
 
         consentAccepted.value = ConsentStore.isAccepted(this)
 
+        // Back closes the log page or the picker first, and only then leaves the app.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    showLogPage.value -> showLogPage.value = false
+                    pickerVisible.value -> pickerVisible.value = false
+                    else -> {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                    }
+                }
+            }
+        })
+
         findViewById<ComposeView>(R.id.main).setContent {
-            // 同意两份文件后淡入主界面；未同意前主界面不会被组合，也不做任何 ADB 操作
+            // Fade into the main screen once both documents are accepted; before that it is not
+            // composed at all and no ADB work happens.
             ConsentTransition(
                 accepted = consentAccepted.value,
                 consent = { ConsentScreen(onAccept = ::acceptConsent) },
                 main = {
-                    PairingScreen(
-                        running = pairingRunning.value,
-                        paired = paired.value,
-                        connecting = connecting.value,
-                        connected = connected.value,
-                        needsPairing = needsPairing.value,
-                        supportState = supportState.value,
-                        engineLabel = engineLabel.value,
-                        deviceInfo = deviceInfo.value,
-                        exploiting = exploiting.value,
-                        exploitLog = exploitLog.value,
-                        exploitStatus = exploitStatus.value,
-                        exploitProgress = exploitProgress.value,
-                        exploitChoices = exploitChoices.value,
-                        pickerVisible = pickerVisible.value,
-                        onToggle = ::onPrimaryAction,
-                        commandMode = commandMode.value,
-                        onExploit = ::openEnginePicker,
-                        onPickEngine = ::startExploit,
-                        onDismissPicker = { pickerVisible.value = false },
-                        onRunCommand = ::runRootCommand
+                    // The exploit log is its own page, so it gets the whole screen.
+                    PageSlide(
+                        showSecond = showLogPage.value,
+                        first = {
+                            PairingScreen(
+                                running = pairingRunning.value,
+                                paired = paired.value,
+                                connecting = connecting.value,
+                                connected = connected.value,
+                                needsPairing = needsPairing.value,
+                                supportState = supportState.value,
+                                engineLabel = engineLabel.value,
+                                deviceInfo = deviceInfo.value,
+                                exploiting = exploiting.value,
+                                exploitLog = exploitLog.value,
+                                exploitStatus = exploitStatus.value,
+                                exploitChoices = exploitChoices.value,
+                                pickerVisible = pickerVisible.value,
+                                onToggle = ::onPrimaryAction,
+                                onExploit = ::openEnginePicker,
+                                onPickEngine = ::startExploit,
+                                onDismissPicker = { pickerVisible.value = false },
+                                onOpenLog = { showLogPage.value = true },
+                            )
+                        },
+                        second = {
+                            ExploitLogScreen(
+                                lines = exploitLog.value,
+                                status = exploitStatus.value,
+                                progress = exploitProgress.value,
+                                commandMode = commandMode.value,
+                                running = exploiting.value,
+                                onCommand = ::runRootCommand,
+                                onBack = { showLogPage.value = false },
+                            )
+                        },
                     )
                 },
             )
@@ -182,7 +238,7 @@ class MainActivity : AppCompatActivity() {
         if (consentAccepted.value) startMain()
     }
 
-    /** 同意两份文件后：记住版本与时间，再启动主界面该做的事。 */
+    /** Both documents accepted: store the version and time, then start what the screen needs. */
     private fun acceptConsent() {
         ConsentStore.accept(this)
         consentAccepted.value = true
@@ -191,13 +247,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startMain() {
-        // 先填本机信息，避免卡片空着；连上 adbd 之后再用 ADB 的结果覆盖
+        // Fill local device info first so the cards are never empty; ADB values replace it.
         deviceInfo.value = DeviceInfo.fromLocal(this)
         refreshState()
         intent?.let { handleDebugPair(it) }
     }
 
-    /** 主界面存活期间的状态同步：每秒对齐一次 + 配对结果即时生效 + 自动直连一次。 */
+    /** State sync while the main screen lives: one tick a second, instant pairing updates, one auto-connect. */
     private fun beginLiveUpdates() {
         refreshState()
         getSharedPreferences(PairingState.PREF_NAME, MODE_PRIVATE)
@@ -210,7 +266,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 未同意声明前不进主界面、不自动连接
+        // No main screen and no auto-connect before the documents are accepted.
         if (!consentAccepted.value) return
         beginLiveUpdates()
     }
@@ -229,6 +285,8 @@ class MainActivity : AppCompatActivity() {
         if (!connected.value) {
             supportState.value = SupportState.NotConnected
             engineLabel.value = null
+            // Drop the picker when the connection is gone; the button is hidden as well.
+            pickerVisible.value = false
         }
         loadDeviceInfo()
     }
@@ -236,10 +294,11 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ actions
 
     /**
-     * 已经配对过就直接连，不再弹配对码；失败才把配对按钮露出来。
+     * Connect directly when the device is already paired instead of asking for a code again; only a
+     * failure brings the pairing button back.
      *
-     * 升级前配过对的设备还没有 isPaired 标记，但本地已经存了 ADB 密钥，这种情况先静默试一次
-     * 直连，成功就把标记补上。
+     * A device paired before the isPaired flag existed still has our ADB key stored, so that case
+     * tries one silent direct connect and fills the flag in when it works.
      */
     private fun maybeAutoConnect() {
         if (autoConnectTried) return
@@ -344,7 +403,7 @@ class MainActivity : AppCompatActivity() {
             return GpuRunner.describe(info) to state
         }
         val label = available.pageCache ?: return null to SupportState.Unsupported
-        // 没有 profile 时只能"能试"，是否真的能提权要跑过才知道
+        // Without a profile this is only "worth trying": a run is the only way to know.
         val state = when (ExploitMemory.result(this, info.kernel)) {
             true -> SupportState.Supported
             false -> SupportState.Unsupported
@@ -362,7 +421,7 @@ class MainActivity : AppCompatActivity() {
                 .getOrNull()
             if (info != null) {
                 Log.i(TAG, "device info from adb: $info")
-                // 状态判定放在主线程做：快照状态在别的线程读到可能是旧值
+                // Decide on the main thread: snapshot reads on another thread can be stale.
                 runOnUiThread {
                     val (engine, state) = resolveEngine(info)
                     Log.i(TAG, "availability: profile=${availability(info).profile} " +
@@ -388,13 +447,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 跑临时 root：载荷通过 ADB 推到 /data/local/tmp 后以 shell 身份执行，
-     * 输出实时回显在玻璃日志卡里。
+     * Runs temporary root: the payload is pushed to /data/local/tmp over ADB and executed as the
+     * `shell` user, with its output mirrored live in the log card.
      */
-    /** 点击利用按钮：先让用户选引擎，再跑。 */
+    /** Exploit tapped: let the user pick a vulnerability first. */
     private fun openEnginePicker() {
         if (exploiting.value) return
-        // 四个漏洞永远都列出来，能不能用由每一行自己说明
+        // The button is hidden until adbd is connected; this is the second line of defence.
+        if (!connected.value) {
+            toast(R.string.exploit_needs_adb)
+            return
+        }
+        // All four CVEs are always listed; each row explains whether it can run.
         exploitChoices.value = buildChoices(deviceInfo.value)
         pickerVisible.value = true
     }
@@ -460,6 +524,11 @@ class MainActivity : AppCompatActivity() {
     private fun startExploit(engineId: String) {
         pickerVisible.value = false
         if (exploiting.value) return
+        // The payload is pushed over ADB, so do nothing without a connection.
+        if (!connected.value) {
+            toast(R.string.exploit_needs_adb)
+            return
+        }
         val info = deviceInfo.value ?: return
         // The payload is resolved from the device, not from the row: one row per CVE.
         val gpuPayload = if (engineId == ENGINE_CVE_21479) {
@@ -488,9 +557,11 @@ class MainActivity : AppCompatActivity() {
         exploitStatus.value = null
         exploitProgress.value = 0f
         commandMode.value = false
+        // The log has its own page now: show it while the payload runs.
+        showLogPage.value = true
         Thread({
-            // ksud 解析要走 ADB 扫 /data/app：放在工作线程里做一次，四个引擎共用，
-            // 顺便把扫描命令打进日志
+            // Resolving ksud scans /data/app over ADB: done once on this worker and shared by all
+            // four engines, which also puts the scan itself in the log.
             val outcome = runCatching {
                 val ksud = KsuManager.resolve(this, AdbConnectionManager.get(this), ::logLine)
                     ?.takeIf { it.packageName.isNotEmpty() }
@@ -528,7 +599,7 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread { exploitLog.value = (exploitLog.value + line).takeLast(300) }
     }
 
-    /** 内核 profile 引擎：载荷按 uname -r 选 profile，自己完成 ksud late-load。 */
+    /** CVE-2026-43499: the payload picks its profile by `uname -r` and late-loads ksud itself. */
     private fun runProfileEngine(info: DeviceInfo, ksud: KsuManager.Target?): String {
         val result = RootExploit.run(
             context = this,
@@ -557,8 +628,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Adreno GPU 引擎：载荷以 shell 身份跑在 ADB 通道里，拿到 root 后会把暂存的 bootstrap
-     * 作为子进程重新执行；bootstrap 再按 prefs 选择 late-load ksud 或起 root 命令通道。
+     * CVE-2025-21479: the payload runs as `shell` over the ADB channel and re-execs the staged
+     * `bootstrap` as a child once root is held; bootstrap then late-loads ksud or starts the root
+     * command channel according to its preferences.
      */
     private fun runGpuEngine(
         info: DeviceInfo,
@@ -578,8 +650,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * posix-cpu-timers 引擎：载荷先跑 `--preflight` 确认指纹/内核确实是移植过的那个版本，再跑竞态；
-     * 拿到 root 后由载荷把 root 子进程交给暂存的 bootstrap，后续和其他引擎一样。
+     * CVE-2026-64560: the payload runs `--preflight` first to confirm the fingerprint and kernel
+     * really are the ported build, then the race. Once root is held it hands the root child to the
+     * staged bootstrap, same as the other engines.
      */
     private fun runPctEngine(
         info: DeviceInfo,
@@ -606,7 +679,7 @@ class MainActivity : AppCompatActivity() {
         return reportHandoff(ksud, result.handoff, result.exitCode)
     }
 
-    /** page cache 引擎：模块由内核加载，bootstrap/ksud 由 ADB 通道提前放到 /data/local/tmp。 */
+    /** CVE-2026-43284: the module is loaded by the kernel; bootstrap and ksud are staged over ADB. */
     private fun runPageCacheEngine(
         info: DeviceInfo,
         ksud: KsuManager.Target?,
@@ -660,7 +733,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 在 root 命令通道里执行一条命令，输出边跑边回显。 */
+    /** Runs one command through the root channel and mirrors its output while it runs. */
     private fun runRootCommand(command: String) {
         logLine("$ $command")
         Thread({

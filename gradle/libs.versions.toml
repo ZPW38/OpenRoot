@@ -1,12 +1,12 @@
 [versions]
 agp = "9.3.0"
-# 与 AGP 9.3 内置 Kotlin 编译器保持一致（Compose 编译器插件版本必须相同）
+# Must match the Kotlin compiler built into AGP 9.3 (the Compose plugin version has to agree)
 kotlin = "2.2.10"
-# backdrop 2.0.0-alpha03 依赖 Compose Multiplatform 1.10.1，
-# 其在 Android 上对应 androidx.compose 1.10.2
+# backdrop 2.0.0-alpha03 depends on Compose Multiplatform 1.10.1,
+# which maps to androidx.compose 1.10.2 on Android
 compose = "1.10.2"
 backdrop = "2.0.0-alpha03"
-# backdrop 2.0.0-alpha03 依赖的 shapes 版本
+# shapes version required by backdrop 2.0.0-alpha03
 shapes = "1.2.0"
 coreKtx = "1.10.1"
 junit = "4.13.2"
@@ -34,11 +34,11 @@ bouncycastle-prov = { group = "org.bouncycastle", name = "bcprov-jdk18on", versi
 bouncycastle-pkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastle" }
 conscrypt-android = { group = "org.conscrypt", name = "conscrypt-android", version.ref = "conscrypt" }
 
-# Liquid Glass（液态玻璃）效果库
+# Liquid Glass effect library
 kyant-backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }
 kyant-shapes = { group = "io.github.kyant0", name = "shapes", version.ref = "shapes" }
 
-# Compose（backdrop 只在 runtime 作用域传递这些依赖，编译期必须自己声明）
+# Compose (backdrop exposes these at runtime scope only, so they must be declared for compilation)
 androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime", version.ref = "compose" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "compose" }
 androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "compose" }

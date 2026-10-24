@@ -34,15 +34,17 @@ import kotlin.math.sin
 import kotlin.math.tanh
 
 /**
- * 胶囊形液态玻璃按钮，与 kyant0/backdrop 目录示例（Apache-2.0）
- * `components/LiquidButton.kt` 保持一致：
+ * Capsule-shaped liquid glass button, kept in line with the kyant0/backdrop sample (Apache-2.0),
+ * `components/LiquidButton.kt`:
  *
- * - 折射链 `vibrancy() -> blur(2dp) -> lens(12dp, 24dp)`，默认外高光 + 阴影
- * - 按下时整体轻微放大，拖拽时按方向拉伸（[InteractiveHighlight]）
- * - 尺寸：高 64dp，水平 24dp（比参考示例的 48dp/16dp 大一档）
+ * - refraction chain `vibrancy() -> blur(2dp) -> lens(12dp, 24dp)`, plus an outer highlight and a
+ *   drop shadow
+ * - scales up slightly while pressed and stretches along the drag direction
+ *   ([InteractiveHighlight])
+ * - size: 64dp high, 24dp horizontal padding (one step above the sample's 48dp/16dp)
  *
- * [backdrop] 必须是同一 Compose 树里绘制在本按钮下方的图层
- * （见 [PairingScreen] 的 `rememberLayerBackdrop` + `Modifier.layerBackdrop`）。
+ * [backdrop] must be a layer drawn below this button in the same Compose tree (see
+ * `rememberLayerBackdrop` + `Modifier.layerBackdrop` in [PairingScreen]).
  */
 @Composable
 fun LiquidGlassButton(

@@ -1,78 +1,86 @@
-# 第三方代码来源与许可
+# Third-party code and licences
 
-本项目为 GPL-3.0（见 `LICENSE`）。以下第三方代码被直接并入源码树（vendored），
-版权归原作者所有，许可与来源见下。
+This project is GPL-3.0 (see `LICENSE`). The third-party code below is vendored directly into the
+source tree; copyright stays with the original authors, and the licences and sources are listed here.
 
-## ADB 配对协议栈
+## ADB pairing stack
 
-| 来源 | 路径 | 版本 | 许可 |
+| Source | Path | Version | Licence |
 | --- | --- | --- | --- |
-| [MuntashirAkon/libadb-android](https://github.com/MuntashirAkon/libadb-android) | `app/src/main/java/com/hexo141/liquidglass/adb/**` | 3.1.1 | `GPL-3.0-or-later OR Apache-2.0`（本项目按 Apache-2.0 使用） |
-| [MuntashirAkon/spake2-java](https://github.com/MuntashirAkon/spake2-java)（`java` 纯 Java 模块） | `app/src/main/java/com/hexo141/liquidglass/crypto/**` | 2.2.0 | LGPL-3.0 |
-| [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku) | 参考实现：`AdbPairingService`、`AdbPairDialogFragment` 的配对流程与通知栏交互 | master | Apache-2.0 |
+| [MuntashirAkon/libadb-android](https://github.com/MuntashirAkon/libadb-android) | `app/src/main/java/com/hexo141/liquidglass/adb/**` | 3.1.1 | `GPL-3.0-or-later OR Apache-2.0` (used here under Apache-2.0) |
+| [MuntashirAkon/spake2-java](https://github.com/MuntashirAkon/spake2-java) (the plain-Java `java` module) | `app/src/main/java/com/hexo141/liquidglass/crypto/**` | 2.2.0 | LGPL-3.0 |
+| [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku) | Reference for the pairing flow and the notification interaction in `AdbPairingService` and `AdbPairDialogFragment` | master | Apache-2.0 |
 
-被并入的具体文件：
+Files that were vendored:
 
-- `com/hexo141/liquidglass/adb/`：`PairingConnectionCtx`、`PairingAuthCtx`、`KeyPair`、`SslUtils`、
-  `AndroidPubkey`、`StringCompat`、`ByteArrayNoThrowOutputStream`、`AdbMdns`（原 `…adb.android` 包，改到
-  `…adb.mdns`）、`AndroidUtils`，以及同目录下未被本功能直接使用但对编译/后续连接 ADB 有用的
-  `AdbConnection`、`AdbProtocol`、`AdbStream`、`LocalServices`、`PRNGFixes`、异常类等。
-- `com/hexo141/liquidglass/crypto/`：纯 Java 的 SPAKE2 实现（`spake2/Spake2Context`、`Spake2Role`）及其
-  依赖的 Ed25519 / X25519 运算（`ed25519/*`、`x25519/*`）。
+- `com/hexo141/liquidglass/adb/`: `PairingConnectionCtx`, `PairingAuthCtx`, `KeyPair`, `SslUtils`,
+  `AndroidPubkey`, `StringCompat`, `ByteArrayNoThrowOutputStream`, `AdbMdns` (originally in the
+  `…adb.android` package, moved to `…adb.mdns`), `AndroidUtils`, plus `AdbConnection`, `AdbProtocol`,
+  `AdbStream`, `LocalServices`, `PRNGFixes` and the exception types in the same directory, which this
+  feature does not use directly but which the connection code needs.
+- `com/hexo141/liquidglass/crypto/`: the plain-Java SPAKE2 implementation
+  (`spake2/Spake2Context`, `Spake2Role`) and the Ed25519 / X25519 arithmetic it depends on
+  (`ed25519/*`, `x25519/*`).
 
-本地改动：仅将包名 `io.github.muntashirakon.{adb,crypto}` 重写为 `com.hexo141.liquidglass.{adb,crypto}`，
-`socket` 相关的 Java 实现保持不变。没有使用 native 代码，因此不需要 NDK。
+Local changes: only the package name was rewritten from `io.github.muntashirakon.{adb,crypto}` to
+`com.hexo141.liquidglass.{adb,crypto}`; the socket-side Java implementation is untouched. No native
+code is involved, so no NDK is required for it.
 
-## Liquid Glass 按钮效果
+## Liquid Glass button
 
-| 来源 | 方式 | 版本 | 许可 |
+| Source | How it is used | Version | Licence |
 | --- | --- | --- | --- |
-| [Kyant0/Backdrop](https://github.com/Kyant0/AndroidLiquidGlass)（`io.github.kyant0:backdrop`） | Maven 依赖（编译期库本体） | 2.0.0-alpha03 | Apache-2.0 |
-| 同仓库目录示例 `components/LiquidButton.kt` | 参考实现：`app/src/main/java/com/hexo141/liquidglass/ui/LiquidGlassButton.kt` 去掉拖拽高光后的胶囊玻璃按钮 | master | Apache-2.0 |
+| [Kyant0/Backdrop](https://github.com/Kyant0/AndroidLiquidGlass) (`io.github.kyant0:backdrop`) | Maven dependency (the library itself) | 2.0.0-alpha03 | Apache-2.0 |
+| The sample in the same repository, `components/LiquidButton.kt` | Reference for `app/src/main/java/com/hexo141/liquidglass/ui/LiquidGlassButton.kt`, a capsule glass button with the drag highlight removed | master | Apache-2.0 |
 
-该库是 Compose 实现，因此 `MainActivity` 用 `ComposeView` 承载主界面，Compose 编译器
-插件版本与 AGP 9.3 内置 Kotlin 一致（`org.jetbrains.kotlin.plugin.compose:2.2.10`）。
-该依赖同时拉入 Jetbrains Compose 多平台构件（Android 变体映射到 `androidx.compose.*` 1.10.x）
-与 `io.github.kyant0:shapes`，均来自 Maven Central（阿里云镜像）。
+The library is a Compose implementation, which is why `MainActivity` hosts the screen in a
+`ComposeView`, and why the Compose compiler plugin version matches the Kotlin built into AGP 9.3
+(`org.jetbrains.kotlin.plugin.compose:2.2.10`). The dependency also pulls the JetBrains Compose
+multiplatform artifacts (the Android variant maps to `androidx.compose.*` 1.10.x) and
+`io.github.kyant0:shapes`, all from Maven Central (Aliyun mirror).
 
-## CVE-2025-21479 载荷
+## CVE-2025-21479 payload
 
-| 来源 | 路径 | 说明 | 许可 |
+| Source | Path | Notes | Licence |
 | --- | --- | --- | --- |
-| [zhuowei/cheese](https://github.com/zhuowei/cheese) | `native-gpu/quest/**` | Quest 3/3S 版本，commit `1ae1e77` | 上游未声明许可证 |
-| [Qingizi7/cve-2025-21479_iqooneo8](https://github.com/Qingizi7/cve-2025-21479_iqooneo8) | `native-gpu/snapdragon/**` | iQOO Neo8 / SM8475 移植，commit `b63479` | 上游未声明许可证 |
+| [zhuowei/cheese](https://github.com/zhuowei/cheese) | `native-gpu/quest/**` | Quest 3/3S build, commit `1ae1e77` | no licence declared upstream |
+| [Qingizi7/cve-2025-21479_iqooneo8](https://github.com/Qingizi7/cve-2025-21479_iqooneo8) | `native-gpu/snapdragon/**` | iQOO Neo8 / SM8475 port, commit `b63479` | no licence declared upstream |
 
-两个上游仓库都在 README 中声明仅用于对自有或已授权设备的安全研究。`adrenaline.h` 源自
-hawkes 的 Project Zero Adrenaline，`kallsyms_lookup.c` 源自上面的 cheese 谱系；本地改动仅为
-目录拆分、NDK Makefile 与 APK 打包，漏洞代码本身保持上游原样。
+Both upstream repositories state in their README that they are for security research on devices you
+own or are authorised to test. `adrenaline.h` comes from hawkes' Project Zero Adrenaline and
+`kallsyms_lookup.c` from the cheese lineage above. The local changes are limited to splitting the
+directories, the NDK Makefile and packaging into the APK; the vulnerability code is upstream as-is.
 
-## CVE-2026-64560 载荷
+## CVE-2026-64560 payload
 
-| 来源 | 路径 | 说明 | 许可 |
+| Source | Path | Notes | Licence |
 | --- | --- | --- | --- |
-| [Wangs-official/opace6-cve-2026-64560](https://github.com/Wangs-official/opace6-cve-2026-64560) | `native-pct/opace6/**` | OnePlus Ace 6（OP6113L1 / 6.6.118 GKI）移植，commit `4558a33` | Apache-2.0 |
+| [Wangs-official/opace6-cve-2026-64560](https://github.com/Wangs-official/opace6-cve-2026-64560) | `native-pct/opace6/**` | OnePlus Ace 6 port (OP6113L1 / 6.6.118 GKI), commit `4558a33` | Apache-2.0 |
 
-该移植的上游是 `NebuSec/CyberMeowfia` 的 Android-CVE-2026-64560 研究（原 Xiaomi 15 `dada` 版本），
-`NOTICE` 随源码一起保留在 `native-pct/opace6/NOTICE`。漏洞代码本身保持原样，本地改动只有两处：
+That port descends from the `NebuSec/CyberMeowfia` Android-CVE-2026-64560 research (originally the
+Xiaomi 15 `dada` build), and its `NOTICE` is kept next to the source in `native-pct/opace6/NOTICE`.
+The vulnerability code is unchanged; there are exactly two local changes:
 
-- 根子进程支持 `OPENROOT_HANDOFF` 环境变量：拿到 root 后 exec 暂存的 `loader`
-  （`native-or/bootstrap.c`），而不是停在无人输入的交互 shell；
-- 目录拆分与 NDK Makefile（`native-pct/Makefile`）。
+- the root child honours an `OPENROOT_HANDOFF` environment variable and `exec`s the staged `loader`
+  (`native-or/bootstrap.c`) instead of sitting in an interactive shell nobody types into;
+- the directory split and the NDK Makefile (`native-pct/Makefile`).
 
-## 内置壁纸
+## Bundled wallpaper
 
-`app/src/main/res/drawable-nodpi/bg.jpg` 由项目使用者提供（来自本地下载文件，
-原图 2160×3840，并入时重采样到 1080×1920）。其版权/许可由提供者负责，本项目不重新授权。
+`app/src/main/res/drawable-nodpi/bg.jpg` was provided by the user of this project (from a local
+download, 2160×3840, resampled to 1080×1920 on the way in). Its copyright and licence are the
+provider's responsibility; this project does not relicense it.
 
-## 参考但未复制
+## Referenced but not copied
 
-`RikkaApps/Shizuku` 的 `manager/src/main/jni/adb_pairing.cpp` 使用 BoringSSL 的 SPAKE2 实现
-（`libadb.so`）；本项目改用上面的纯 Java SPAKE2，行为一致但无需编译 native 库。
+`RikkaApps/Shizuku` implements SPAKE2 in `manager/src/main/jni/adb_pairing.cpp` on top of BoringSSL
+(`libadb.so`). This project uses the plain-Java SPAKE2 above instead: same behaviour, no native
+library to build.
 
-## 新增运行时依赖（均来自 Maven Central）
+## Added runtime dependencies (all from Maven Central)
 
-- `org.bouncycastle:bcprov-jdk18on` —— SPAKE2 之后的 HKDF / AES-GCM 运算
-- `org.bouncycastle:bcpkix-jdk18on` —— 生成自签名证书（TLS 客户端证书）
-- `org.conscrypt:conscrypt-android` —— 提供 TLSv1.3 的 `exportKeyingMaterial`
+- `org.bouncycastle:bcprov-jdk18on` — HKDF / AES-GCM after SPAKE2
+- `org.bouncycastle:bcpkix-jdk18on` — self-signed certificate for the TLS client
+- `org.conscrypt:conscrypt-android` — TLSv1.3 `exportKeyingMaterial`
 - `androidx.annotation:annotation`
-- `io.github.kyant0:backdrop` —— 液态玻璃按钮（见上文）
+- `io.github.kyant0:backdrop` — liquid glass button (see above)

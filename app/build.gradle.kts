@@ -168,13 +168,14 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
 
-    // Compose 基础库：backdrop 的 compose 依赖是 runtime 作用域，编译期需要显式声明
+    // Compose basics: backdrop exposes its Compose deps at runtime scope, so they have to be
+    // declared here for compilation.
     implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.foundation)
 
-    // Liquid Glass 按钮（Compose，同时带入 shapes）
+    // Liquid Glass button (Compose, also pulls in shapes)
     implementation(libs.kyant.backdrop)
     implementation(libs.kyant.shapes)
 

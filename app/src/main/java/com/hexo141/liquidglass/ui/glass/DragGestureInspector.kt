@@ -13,8 +13,8 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.util.fastFirstOrNull
 
 /**
- * 取自 kyant0/backdrop 目录示例（Apache-2.0）`utils/DragGestureInspector.kt`，
- * 供 [InteractiveHighlight] 使用；仅改包名。
+ * Taken from the kyant0/backdrop sample (Apache-2.0), `utils/DragGestureInspector.kt`, for
+ * [InteractiveHighlight]; only the package name changed.
  */
 suspend fun PointerInputScope.inspectDragGestures(
     onDragStart: (down: PointerInputChange) -> Unit = {},

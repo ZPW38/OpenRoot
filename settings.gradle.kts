@@ -1,6 +1,6 @@
 pluginManagement {
     repositories {
-        // 阿里云镜像
+        // Aliyun mirror
         maven {
             name = "AliyunGoogle"
             url = uri("https://maven.aliyun.com/repository/google")
@@ -26,7 +26,7 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        // 阿里云镜像
+        // Aliyun mirror
         maven {
             name = "AliyunGoogle"
             url = uri("https://maven.aliyun.com/repository/google")

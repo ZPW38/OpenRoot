@@ -20,8 +20,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * 按下时随手指移动的高光。取自 kyant0/backdrop 目录示例（Apache-2.0）
- * `utils/InteractiveHighlight.kt`，仅改包名。
+ * Highlight that follows the finger while pressed. Taken from the kyant0/backdrop sample
+ * (Apache-2.0), `utils/InteractiveHighlight.kt`; only the package name changed.
  */
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
