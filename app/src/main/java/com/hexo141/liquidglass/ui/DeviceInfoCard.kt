@@ -69,7 +69,7 @@ fun DeviceInfoCards(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             InfoTile(
-                label = "Device",
+                label = "设备",
                 value = info.deviceName,
                 backdrop = backdrop,
                 surfaceColor = surfaceColor,
@@ -78,7 +78,7 @@ fun DeviceInfoCards(
                     .fillMaxHeight()
             )
             InfoTile(
-                label = "Chip",
+                label = "芯片",
                 value = info.chipset,
                 backdrop = backdrop,
                 surfaceColor = surfaceColor,
@@ -118,7 +118,7 @@ fun DeviceInfoCards(
             modifier = Modifier.fillMaxWidth()
         )
         InfoTile(
-            label = "Kernel",
+            label = "内核",
             value = info.kernel,
             backdrop = backdrop,
             surfaceColor = surfaceColor,

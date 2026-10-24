@@ -124,7 +124,7 @@ fun ConsentScreen(
                 )
                 Spacer(Modifier.weight(1f))
                 BasicText(
-                    text = "Step ${step + 1} of 2",
+                    text = "第 ${step + 1} 步 / 共 2 步",
                     style = TextStyle(
                         color = Color.White.copy(alpha = 0.6f),
                         fontSize = 12.sp
@@ -153,9 +153,9 @@ fun ConsentScreen(
 
             BasicText(
                 text = if (onLicenseStep) {
-                    "Document 1 of 2 · licence of this software"
+                    "文件 1 / 2 · 本软件许可协议"
                 } else {
-                    "Document 2 of 2 · what temporary root means for your device"
+                    "文件 2 / 2 · 临时 root 对你的设备意味着什么"
                 },
                 style = TextStyle(
                     color = Color.White.copy(alpha = 0.72f),
@@ -180,7 +180,7 @@ fun ConsentScreen(
                         text = if (onLicenseStep) {
                             "GNU GENERAL PUBLIC LICENSE, Version 3, 29 June 2007"
                         } else {
-                            "TEMPORARY ROOT DISCLAIMER AND TERMS OF USE"
+                            "临时 root 免责声明与使用条款"
                         },
                         style = TextStyle(
                             color = Color.White.copy(alpha = 0.92f),
@@ -191,9 +191,9 @@ fun ConsentScreen(
                     )
                     BasicText(
                         text = when {
-                            !onLicenseStep -> "Bundled with this build. Read it in full."
-                            license == null -> "Fetching the licence text from both mirrors…"
-                            else -> "Text source: ${license?.source}"
+                            !onLicenseStep -> "已随本版本内置，请完整阅读。"
+                            license == null -> "正在从镜像获取许可协议全文…"
+                            else -> "文本来源：${license?.source}"
                         },
                         style = TextStyle(
                             color = Color.White.copy(alpha = 0.5f),
@@ -224,9 +224,9 @@ fun ConsentScreen(
                         checked = acceptedHere,
                         enabled = readyHere,
                         label = if (onLicenseStep) {
-                            "I have read and accept the GNU General Public License v3.0"
+                            "我已阅读并接受 GNU 通用公共许可证 v3.0"
                         } else {
-                            "I have read and accept the temporary root disclaimer"
+                            "我已阅读并接受临时 root 免责声明"
                         },
                         onChecked = {
                             if (onLicenseStep) licenseAccepted = it else disclaimerAccepted = it
@@ -252,7 +252,7 @@ fun ConsentScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         BasicText(
-                            text = "Back",
+                            text = "返回",
                             style = TextStyle(
                                 color = Color.White.copy(alpha = 0.85f),
                                 fontSize = 14.sp,
@@ -277,7 +277,7 @@ fun ConsentScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     BasicText(
-                        text = if (onLicenseStep) "Continue" else "Accept and continue",
+                        text = if (onLicenseStep) "继续" else "接受并继续",
                         style = TextStyle(
                             color = Color.White.copy(alpha = if (acceptedHere) 1f else 0.45f),
                             fontSize = 15.sp,
@@ -289,9 +289,9 @@ fun ConsentScreen(
             Spacer(Modifier.height(6.dp))
             BasicText(
                 text = if (onLicenseStep) {
-                    "The licence has to be accepted before the next document."
+                    "需先接受此许可才能继续下一个文件。"
                 } else {
-                    "Accepting is stored on this device only."
+                    "接受记录仅保存在本机。"
                 },
                 style = TextStyle(
                     color = Color.White.copy(alpha = 0.45f),

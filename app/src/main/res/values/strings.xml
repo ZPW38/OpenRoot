@@ -1,63 +1,63 @@
 <resources>
     <string name="app_name">OpenRoot</string>
 
-    <!-- Wireless debugging pairing -->
-    <string name="adb_pairing_channel_name">Wireless pairing</string>
-    <string name="adb_pairing_channel_description">Wireless debugging pairing</string>
+    <!-- 无线调试配对 -->
+    <string name="adb_pairing_channel_name">无线配对</string>
+    <string name="adb_pairing_channel_description">无线调试配对</string>
 
-    <string name="adb_pairing_searching_title">Waiting for pairing request</string>
-    <string name="adb_pairing_searching_text">Open "Pair device with pairing code" in Developer options</string>
+    <string name="adb_pairing_searching_title">等待配对请求</string>
+    <string name="adb_pairing_searching_text">请在开发者选项里打开「使用配对码配对设备」</string>
 
-    <string name="adb_pairing_found_title">Pairing request found</string>
-    <string name="adb_pairing_found_text">Tap to enter the 6-digit code</string>
-    <string name="adb_pairing_code_hint">Pairing code</string>
-    <string name="adb_pairing_input_code">Enter code</string>
+    <string name="adb_pairing_found_title">发现配对请求</string>
+    <string name="adb_pairing_found_text">点按以输入六位配对码</string>
+    <string name="adb_pairing_code_hint">配对码</string>
+    <string name="adb_pairing_input_code">输入配对码</string>
 
-    <string name="adb_pairing_working_title">Pairing…</string>
-    <string name="adb_pairing_working_text">Port %1$d</string>
+    <string name="adb_pairing_working_title">配对中…</string>
+    <string name="adb_pairing_working_text">端口 %1$d</string>
 
-    <string name="adb_pairing_succeed_title">Paired</string>
-    <string name="adb_pairing_succeed_text">Key added to adbd</string>
+    <string name="adb_pairing_succeed_title">配对成功</string>
+    <string name="adb_pairing_succeed_text">公钥已交给 adbd</string>
 
-    <string name="adb_pairing_failed_title">Pairing failed</string>
-    <string name="adb_pairing_failed_code">Wrong or expired pairing code</string>
-    <string name="adb_pairing_failed_empty_code">No pairing code entered</string>
-    <string name="adb_pairing_failed_port">Cannot reach the pairing port, reopen the pairing dialog</string>
-    <string name="adb_pairing_failed_tls">TLS handshake failed</string>
-    <string name="adb_pairing_failed_tls_export">Cannot export the TLS session keys, the bundled TLS library failed to load</string>
+    <string name="adb_pairing_failed_title">配对失败</string>
+    <string name="adb_pairing_failed_code">配对码错误或已过期</string>
+    <string name="adb_pairing_failed_empty_code">没有输入配对码</string>
+    <string name="adb_pairing_failed_port">无法连接配对端口，请重新打开配对对话框</string>
+    <string name="adb_pairing_failed_tls">TLS 握手失败</string>
+    <string name="adb_pairing_failed_tls_export">无法导出 TLS 会话密钥，内置的 TLS 库加载失败</string>
 
-    <string name="adb_pairing_retry">Retry</string>
-    <string name="adb_pairing_stop">Stop</string>
+    <string name="adb_pairing_retry">重试</string>
+    <string name="adb_pairing_stop">停止</string>
 
-    <!-- Main screen -->
-    <string name="adb_pairing_start">Start pairing</string>
-    <string name="adb_pairing_stop_button">Stop pairing</string>
-    <string name="adb_pairing_permission_needed">Notification permission required</string>
+    <!-- 主界面 -->
+    <string name="adb_pairing_start">开始配对</string>
+    <string name="adb_pairing_stop_button">停止配对</string>
+    <string name="adb_pairing_permission_needed">需要通知权限</string>
 
-    <!-- Already paired: connect without a code, fall back to pairing on failure -->
-    <string name="adb_connect">Connect</string>
-    <string name="adb_connect_connecting">Connecting…</string>
-    <string name="adb_disconnect">Disconnect</string>
-    <string name="adb_connect_failed_fallback">Direct connection failed, pair with a code</string>
-    <string name="adb_tcp_connect_failed">Cannot reach adb on the TCP endpoint; run adb tcpip 5555 first</string>
+    <!-- 已配对：免配对码直连，失败再回退到配对 -->
+    <string name="adb_connect">连接</string>
+    <string name="adb_connect_connecting">连接中…</string>
+    <string name="adb_disconnect">断开</string>
+    <string name="adb_connect_failed_fallback">直连失败，请使用配对码重新配对</string>
+    <string name="adb_tcp_connect_failed">无法连接 TCP 端点，请先执行 adb tcpip 5555</string>
 
-    <!-- Shizuku: borrow an already authorized service -->
-    <string name="shizuku_not_running">Shizuku is not running</string>
-    <string name="shizuku_permission_denied">Shizuku access denied</string>
-    <string name="shizuku_connect_failed">Shizuku connection failed</string>
+    <!-- Shizuku：借用已授权的服务 -->
+    <string name="shizuku_not_running">Shizuku 没有在运行</string>
+    <string name="shizuku_permission_denied">Shizuku 授权被拒绝</string>
+    <string name="shizuku_connect_failed">Shizuku 连接失败</string>
 
-    <!-- Temporary root -->
-    <string name="exploit_button">Exploit</string>
-    <string name="exploit_running">Exploiting…</string>
-    <string name="exploit_needs_adb">Connect to ADB first</string>
-    <string name="exploit_unsupported_kernel">No profile bundled for this kernel</string>
-    <string name="exploit_needs_android12l">This engine needs Android 12L (API 32) or newer</string>
-    <string name="exploit_finished">Payload finished</string>
-    <string name="exploit_exit_code">Payload exited with code %1$d</string>
-    <string name="exploit_ksu_loaded">Temporary root acquired, KernelSU module loaded</string>
-    <string name="exploit_ksu_manual">Temporary root acquired, KernelSU module loaded (open the manager manually)</string>
-    <string name="exploit_ksu_opened">Temporary root acquired, opening KernelSU</string>
+    <!-- 临时 root -->
+    <string name="exploit_button">提权</string>
+    <string name="exploit_running">提权中…</string>
+    <string name="exploit_needs_adb">请先连接 adb</string>
+    <string name="exploit_unsupported_kernel">没有适配此内核的配置</string>
+    <string name="exploit_needs_android12l">此引擎需要 Android 12L（API 32）或更高版本</string>
+    <string name="exploit_finished">载荷已结束</string>
+    <string name="exploit_exit_code">载荷退出，代码 %1$d</string>
+    <string name="exploit_ksu_loaded">已取得临时 root，KernelSU 模块已加载</string>
+    <string name="exploit_ksu_manual">已取得临时 root，KernelSU 模块已加载（请手动打开管理器）</string>
+    <string name="exploit_ksu_opened">已取得临时 root，正在打开 KernelSU</string>
     <string name="engine_kernel_profile">CVE-2026-43499</string>
-    <string name="exploit_root_ready">Temporary root ready, type a command below</string>
-    <string name="exploit_profile_gate_failed">This build is not the one the payload was ported to</string>
+    <string name="exploit_root_ready">临时 root 已就绪，可在下方输入命令</string>
+    <string name="exploit_profile_gate_failed">当前系统版本不是载荷移植的目标版本</string>
 </resources>

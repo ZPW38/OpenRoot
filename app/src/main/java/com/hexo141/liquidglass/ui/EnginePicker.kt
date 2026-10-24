@@ -108,7 +108,7 @@ fun EnginePicker(
                 .padding(vertical = 18.dp, horizontal = 18.dp)
         ) {
             BasicText(
-                text = "Select vulnerability",
+                text = "选择漏洞",
                 style = TextStyle(
                     color = Color.White.copy(alpha = 0.95f),
                     fontSize = 19.sp,
@@ -148,10 +148,10 @@ fun EnginePicker(
                     }
                     Spacer(Modifier.width(12.dp))
                     if (choice.enabled) {
-                        PickerButton(text = "Run") { onPick(choice.id) }
+                        PickerButton(text = "运行") { onPick(choice.id) }
                     } else {
                         BasicText(
-                            text = "Unavailable",
+                            text = "不可用",
                             style = TextStyle(
                                 color = Color.White.copy(alpha = 0.3f),
                                 fontSize = 13.sp,
@@ -166,7 +166,7 @@ fun EnginePicker(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                PickerButton(text = "Cancel", onClick = onDismiss)
+                PickerButton(text = "取消", onClick = onDismiss)
             }
         }
     }

@@ -105,10 +105,10 @@ fun PairingScreen(
     val showPairingButton = !paired || needsPairing
 
     val statusText = when {
-        connecting -> "Connecting…"
-        connected -> "Connected"
-        paired -> "Waiting for adbd"
-        else -> "Not paired"
+        connecting -> "连接中…"
+        connected -> "已连接"
+        paired -> "等待 adbd"
+        else -> "未配对"
     }
 
     Box(modifier.fillMaxSize()) {
@@ -213,7 +213,7 @@ fun PairingScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     BasicText(
-                        text = if (exploiting) "Exploit running - open log" else "Open exploit log",
+                        text = if (exploiting) "提权运行中，点此看日志" else "打开提权日志",
                         style = buttonTextStyle()
                     )
                 }
@@ -255,7 +255,7 @@ fun PairingScreen(
                         horizontalPadding = 22.dp
                     ) {
                         BasicText(
-                            text = if (connecting) "Connecting…" else "Connect $tcpEndpoint",
+                            text = if (connecting) "连接中…" else "连接 $tcpEndpoint",
                             style = buttonTextStyle()
                         )
                     }
@@ -272,9 +272,9 @@ fun PairingScreen(
                     ) {
                         BasicText(
                             text = when {
-                                connecting -> "Connecting…"
-                                shizukuReady -> "Connect through Shizuku"
-                                else -> "Grant Shizuku access"
+                                connecting -> "连接中…"
+                                shizukuReady -> "通过 Shizuku 连接"
+                                else -> "授权 Shizuku"
                             },
                             style = buttonTextStyle()
                         )
@@ -377,7 +377,7 @@ private fun ModeSwitcher(
     onSelect: (ConnectionMode) -> Unit,
 ) {
     val items = listOf(
-        ConnectionMode.PAIRING to "Pairing",
+        ConnectionMode.PAIRING to "无线配对",
         ConnectionMode.TCP to "TCP 5555",
         ConnectionMode.SHIZUKU to "Shizuku",
     )

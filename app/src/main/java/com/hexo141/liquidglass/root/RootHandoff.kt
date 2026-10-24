@@ -46,14 +46,14 @@ object RootHandoff {
         while (true) {
             markers = readMarkers(shell, log)
             if ("dfm6" in markers) {
-                return Result(State.KERNEL_SU, markers, "KernelSU module loaded")
+                return Result(State.KERNEL_SU, markers, "KernelSU 模块已加载")
             }
             if ("dfm7" in markers || "dfm1" in markers) {
                 if (channelAnswers(shell)) {
                     val detail = if ("dfm7" in markers) {
-                        "KernelSU late-load failed, root command channel is up"
+                        "KernelSU 延迟加载失败，root 命令通道已就绪"
                     } else {
-                        "root command channel is up"
+                        "root 命令通道已就绪"
                     }
                     return Result(State.COMMAND, markers, detail)
                 }
@@ -63,14 +63,14 @@ object RootHandoff {
             }
             if (System.currentTimeMillis() >= deadline) {
                 val detail = if (markers.isEmpty()) {
-                    "bootstrap did not run"
+                    "bootstrap 没有运行"
                 } else {
-                    "bootstrap ran but no root channel answered"
+                    "bootstrap 已运行，但没有 root 通道应答"
                 }
                 return Result(State.NONE, markers, detail)
             }
             if (!announced) {
-                log("<i> waiting for the root handoff")
+                log("<i> 等待 root 交接")
                 announced = true
             }
             Thread.sleep(500)
@@ -97,9 +97,9 @@ object RootHandoff {
             .contains("uid=0")
 
     private fun failureReason(markers: Set<String>): String = when {
-        "dfme2" in markers -> "KernelSU late-load failed and no command channel answered"
-        "dfme1" in markers -> "disabling modules failed and no command channel answered"
-        "dfme0" in markers -> "bootstrap could not read its preferences"
-        else -> "bootstrap reported a failure"
+        "dfme2" in markers -> "KernelSU 延迟加载失败，且没有命令通道应答"
+        "dfme1" in markers -> "禁用模块失败，且没有命令通道应答"
+        "dfme0" in markers -> "bootstrap 无法读取它的配置文件"
+        else -> "bootstrap 报告了失败"
     }
 }

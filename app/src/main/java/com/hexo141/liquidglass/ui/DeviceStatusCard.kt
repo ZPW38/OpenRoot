@@ -70,24 +70,24 @@ fun DeviceStatusCard(
         SupportState.Checking -> Color(0xFF7DD3FC)
     }
     val title = when (state) {
-        SupportState.Supported -> "Supported"
-        SupportState.Candidate -> "Untested"
-        SupportState.Unsupported -> "Unsupported"
-        SupportState.NotConnected -> "Not connected"
-        SupportState.Checking -> "Checking"
+        SupportState.Supported -> "可用"
+        SupportState.Candidate -> "未验证"
+        SupportState.Unsupported -> "不支持"
+        SupportState.NotConnected -> "未连接"
+        SupportState.Checking -> "检测中"
     }
     val subtitle = when (state) {
-        SupportState.NotConnected -> "No adbd session yet"
-        SupportState.Checking -> release.ifEmpty { "Reading device" }
-        else -> release.ifEmpty { "Unknown kernel" }
+        SupportState.NotConnected -> "尚未建立 adbd 连接"
+        SupportState.Checking -> release.ifEmpty { "正在读取设备" }
+        else -> release.ifEmpty { "未知内核" }
     }
     val detail = when (state) {
-        SupportState.Supported -> engineLabel?.let { "Engine: $it" } ?: "Payload is ready"
-        SupportState.Candidate -> engineLabel?.let { "Engine: $it - not verified yet" } ?: "Not verified yet"
-        SupportState.Unsupported -> engineLabel?.let { "Engine: $it - last run did not root" }
-            ?: "No payload supports this kernel"
-        SupportState.NotConnected -> "Connect to check device support"
-        SupportState.Checking -> "Looking for a matching engine"
+        SupportState.Supported -> engineLabel?.let { "引擎：$it" } ?: "载荷已就绪"
+        SupportState.Candidate -> engineLabel?.let { "引擎：$it - 尚未验证" } ?: "尚未验证"
+        SupportState.Unsupported -> engineLabel?.let { "引擎：$it - 上次运行未取得 root" }
+            ?: "没有适配此内核的载荷"
+        SupportState.NotConnected -> "连接后检查设备支持情况"
+        SupportState.Checking -> "正在寻找匹配的引擎"
     }
 
     Box(

@@ -597,9 +597,9 @@ class MainActivity : AppCompatActivity() {
         val manager = ksudTarget.value
         val noConnection = info == null
         val handoff = if (manager == null) {
-            "root command channel"
+            "root 命令通道"
         } else {
-            "starts ${manager.packageName}"
+            "将启动 ${manager.packageName}"
         }
 
         return listOf(
@@ -607,10 +607,10 @@ class MainActivity : AppCompatActivity() {
                 id = ENGINE_CVE_43499,
                 title = "CVE-2026-43499",
                 detail = when {
-                    available.profile -> "Kernel profile for $kernel"
-                    noConnection -> "Connect to adb first"
-                    !RootExploit.isPayloadPresent(this) -> "Payload not packaged for this ABI"
-                    else -> "No profile for $kernel"
+                    available.profile -> "适配 $kernel 的内核配置"
+                    noConnection -> "请先连接 adb"
+                    !RootExploit.isPayloadPresent(this) -> "此 ABI 未打包对应载荷"
+                    else -> "没有适配 $kernel 的配置"
                 },
                 enabled = available.profile,
             ),
@@ -618,10 +618,10 @@ class MainActivity : AppCompatActivity() {
                 id = ENGINE_CVE_64560,
                 title = "CVE-2026-64560",
                 detail = when {
-                    noConnection -> "Connect to adb first"
-                    !available.pctMatched -> "No ported build for this device"
-                    available.pctPayload == null -> "Payload not packaged for this ABI"
-                    else -> "Race, up to 32 attempts, SELinux stays off, $handoff"
+                    noConnection -> "请先连接 adb"
+                    !available.pctMatched -> "此设备没有移植版本"
+                    available.pctPayload == null -> "此 ABI 未打包对应载荷"
+                    else -> "竞态利用，最多 32 次尝试，SELinux 保持关闭，$handoff"
                 },
                 enabled = available.pctPayload != null,
             ),
@@ -629,10 +629,10 @@ class MainActivity : AppCompatActivity() {
                 id = ENGINE_CVE_21479,
                 title = "CVE-2025-21479",
                 detail = when {
-                    noConnection -> "Connect to adb first"
-                    !available.gpuMatched -> "GPU not supported"
-                    available.gpuPayload == null -> "Payload not packaged for this ABI"
-                    else -> "SELinux stays off, $handoff"
+                    noConnection -> "请先连接 adb"
+                    !available.gpuMatched -> "GPU 不支持"
+                    available.gpuPayload == null -> "此 ABI 未打包对应载荷"
+                    else -> "SELinux 保持关闭，$handoff"
                 },
                 enabled = available.gpuPayload != null,
             ),
@@ -640,10 +640,10 @@ class MainActivity : AppCompatActivity() {
                 id = ENGINE_CVE_43284,
                 title = "CVE-2026-43284",
                 detail = when {
-                    noConnection -> "Connect to adb first"
+                    noConnection -> "请先连接 adb"
                     Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2 ->
-                        "Needs Android 12L (API 32) or newer"
-                    available.pageCache == null -> "Kernel not covered by the module images"
+                        "需要 Android 12L（API 32）或更高版本"
+                    available.pageCache == null -> "内核不在模块镜像的覆盖范围内"
                     else -> "${available.pageCache}, $handoff"
                 },
                 enabled = available.pageCache != null,
