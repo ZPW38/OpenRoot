@@ -1,5 +1,6 @@
 package com.hexo141.liquidglass.ui
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -11,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,10 +43,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hexo141.liquidglass.R
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -55,6 +59,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import org.json.JSONArray
+import org.json.JSONObject
 import java.net.URL
 import kotlin.math.absoluteValue
 
@@ -75,6 +80,12 @@ fun AboutScreen(
         else Color.Unspecified
 
     val context = LocalContext.current
+
+    val installedVersion = remember(context) { installedVersionName(context) }
+    // The badge only exists when GitHub publishes a release newer than this build.
+    val update by produceState<AppUpdate?>(initialValue = null, installedVersion) {
+        value = UpdateChecker.check(installedVersion)
+    }
 
     fun openUrl(url: String) {
         runCatching {
@@ -124,15 +135,33 @@ fun AboutScreen(
                 )
                 .padding(horizontal = 18.dp, vertical = 16.dp)
         ) {
-            BasicText(
-                text = "OpenRoot",
-                style = TextStyle(
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    shadow = aboutShadow
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BasicText(
+                    text = "OpenRoot",
+                    style = TextStyle(
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        shadow = aboutShadow
+                    )
                 )
-            )
+                if (installedVersion.isNotEmpty()) {
+                    Spacer(Modifier.width(8.dp))
+                    BasicText(
+                        text = installedVersion,
+                        style = TextStyle(
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            shadow = aboutShadow
+                        )
+                    )
+                }
+                update?.let { available ->
+                    Spacer(Modifier.width(10.dp))
+                    UpdateBadge(onClick = { openUrl(available.url) })
+                }
+            }
             Spacer(Modifier.height(10.dp))
             listOf(
                 "Wireless ADB pairing, no cable and no PC.",
@@ -298,6 +327,107 @@ private fun ContributorAvatar(contributor: Contributor, modifier: Modifier = Mod
 /** One GitHub account from the contributors endpoint. */
 private data class Contributor(val login: String, val avatarUrl: String)
 
+/** Blue circular badge shown beside the title while a newer release exists. */
+@Composable
+private fun UpdateBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(updateBlue)
+            .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_arrow_up),
+            contentDescription = "Download update",
+            modifier = Modifier.size(15.dp)
+        )
+    }
+}
+
+/** The APK's own version, written by Gradle as `vYYYYMMDD`. */
+@Suppress("DEPRECATION")
+private fun installedVersionName(context: Context): String =
+    runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    }.getOrNull().orEmpty()
+
+/** One newer release: its tag (`vYYYYMMDD`) and where tapping the badge should go. */
+private data class AppUpdate(val version: String, val url: String)
+
+/**
+ * Latest release of `hexo141/OpenRoot`, from `GET /repos/hexo141/OpenRoot/releases/latest`.
+ *
+ * Gradle stamps the APK with the build date and CI publishes the same date as the tag, so a
+ * numeric tag comparison is an exact update test. The answer is cached for a few minutes, and a
+ * failed request simply hides the badge until the next check.
+ */
+private object UpdateChecker {
+    private const val LATEST_RELEASE_URL =
+        "https://api.github.com/repos/hexo141/OpenRoot/releases/latest"
+    private const val CHECK_INTERVAL_MS = 10 * 60 * 1000L
+
+    @Volatile
+    private var checkedAt = 0L
+
+    @Volatile
+    private var latest: AppUpdate? = null
+
+    suspend fun check(installedVersion: String): AppUpdate? {
+        val installed = versionNumber(installedVersion) ?: return null
+        val now = System.currentTimeMillis()
+        if (now - checkedAt > CHECK_INTERVAL_MS) {
+            latest = withContext(Dispatchers.IO) {
+                runCatching { fetchLatest() }
+                    .onFailure { android.util.Log.w("About", "release request failed", it) }
+                    .getOrNull()
+            }
+            checkedAt = now
+        }
+        val update = latest ?: return null
+        val version = versionNumber(update.version) ?: return null
+        return update.takeIf { version > installed }
+    }
+
+    private fun fetchLatest(): AppUpdate? {
+        val connection = URL(LATEST_RELEASE_URL).openConnection() as HttpURLConnection
+        connection.connectTimeout = 6_000
+        connection.readTimeout = 6_000
+        connection.setRequestProperty("User-Agent", "OpenRoot")
+        connection.setRequestProperty("Accept", "application/vnd.github+json")
+        val code = connection.responseCode
+        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+        val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        connection.disconnect()
+        if (code !in 200..299) return null
+
+        val release = JSONObject(body)
+        val tag = release.optString("tag_name")
+        if (tag.isEmpty()) return null
+        // Prefer the APK asset so the badge downloads the update in one tap.
+        val assets = release.optJSONArray("assets")
+        var apkUrl: String? = null
+        if (assets != null) {
+            for (index in 0 until assets.length()) {
+                val asset = assets.optJSONObject(index) ?: continue
+                if (asset.optString("name").endsWith(".apk", ignoreCase = true)) {
+                    apkUrl = asset.optString("browser_download_url").takeIf { it.isNotEmpty() }
+                    break
+                }
+            }
+        }
+        val url = apkUrl ?: release.optString("html_url")
+        if (url.isEmpty()) return null
+        return AppUpdate(tag, url)
+    }
+
+    /** Build dates are `vYYYYMMDD`; other tags cannot be ordered against the installed build. */
+    private fun versionNumber(version: String): Int? =
+        Regex("""(\d{8})""").find(version)?.groupValues?.get(1)?.toIntOrNull()
+}
+
 /**
  * Contributors of the repository, from `GET /repos/hexo141/OpenRoot/contributors`.
  *
@@ -386,6 +516,8 @@ private object AvatarCache {
         return bitmap
     }
 }
+
+private val updateBlue = Color(0xFF0A84FF)
 
 private val aboutShadow = Shadow(
     color = Color.Black.copy(alpha = 0.45f),

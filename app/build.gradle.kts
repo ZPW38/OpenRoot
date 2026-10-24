@@ -1,9 +1,18 @@
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Date-based version, same format and timezone as the release tag the CI publishes (v20261025).
+// CI exports DATE, so the APK version always equals the tag; local builds use the Beijing date.
+val buildDate: String = System.getenv("DATE")
+    ?.takeIf { it.matches(Regex("""\d{8}""")) }
+    ?: LocalDate.now(ZoneId.of("Asia/Shanghai")).format(DateTimeFormatter.BASIC_ISO_DATE)
 
 android {
     namespace = "com.hexo141.liquidglass"
@@ -17,8 +26,9 @@ android {
         applicationId = "com.hexo141.liquidglass"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // A date versionCode also lets a newer APK install over an older one.
+        versionCode = buildDate.toInt()
+        versionName = "v$buildDate"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
