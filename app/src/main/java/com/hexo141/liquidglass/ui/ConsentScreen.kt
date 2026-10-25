@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -110,7 +113,9 @@ fun ConsentScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 20.dp, end = 20.dp, top = 44.dp, bottom = 18.dp)
+                // The wallpaper runs edge to edge; the content stays clear of both bars.
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BasicText(

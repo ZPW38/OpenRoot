@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,8 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.hexo141.liquidglass.R
 import com.hexo141.liquidglass.adb.ConnectionMode
 import com.hexo141.liquidglass.device.DeviceInfo
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.Backdrop
 
 /**
  * Main screen: full-screen wallpaper, the device cards and the centred liquid glass buttons.
@@ -74,6 +76,7 @@ fun PairingScreen(
     exploitStatus: String?,
     exploitChoices: List<ExploitChoice>,
     pickerVisible: Boolean,
+    backdrop: Backdrop,
     onToggle: () -> Unit,
     onExploit: () -> Unit,
     onPickEngine: (String) -> Unit,
@@ -90,11 +93,6 @@ fun PairingScreen(
     onSelectMode: (ConnectionMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backdrop = rememberLayerBackdrop()
-
-    // Reload the image when the configuration changes, or landscape keeps the portrait wallpaper.
-    val configuration = LocalConfiguration.current
-
     // API < 31 has no RenderEffect, so refraction does nothing; a translucent surface keeps the
     // buttons readable on the wallpaper.
     val glassSurfaceColor =
@@ -112,23 +110,15 @@ fun PairingScreen(
     }
 
     Box(modifier.fillMaxSize()) {
-        key(configuration.orientation, configuration.screenWidthDp, configuration.screenHeightDp) {
-            Image(
-                painter = painterResource(R.drawable.bg),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .layerBackdrop(backdrop)
-                    .fillMaxSize()
-            )
-        }
-
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxSize()
                 // Leave room below the status bar so the title and cards sit lower.
-                .padding(start = 20.dp, end = 20.dp, top = 44.dp, bottom = 20.dp)
+                // The wallpaper runs edge to edge; the content stays clear of both bars, so the
+                // bottom cards are never hidden behind the navigation bar.
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
