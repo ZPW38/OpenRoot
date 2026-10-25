@@ -18,6 +18,11 @@ pluginManagement {
             name = "AliyunPublic"
             url = uri("https://maven.aliyun.com/repository/public")
         }
+        // Fallbacks: the Aliyun mirror occasionally answers 502, and a failed repository is
+        // disabled for the whole build, so the upstream repositories have to be listed too.
+        google()
+        mavenCentral()
+        gradlePluginPortal()
     }
 }
 plugins {
@@ -35,6 +40,11 @@ dependencyResolutionManagement {
             name = "AliyunPublic"
             url = uri("https://maven.aliyun.com/repository/public")
         }
+        // Fallbacks: the Aliyun mirror occasionally answers 502, and a failed repository is
+        // disabled for the whole build, so the upstream repositories have to be listed too.
+        google()
+        mavenCentral()
+        gradlePluginPortal()
     }
 }
 
