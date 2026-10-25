@@ -51,12 +51,6 @@ import com.hexo141.liquidglass.ui.ExploitChoice
 import com.hexo141.liquidglass.ui.SupportState
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
-import com.hexo141.liquidglass.ui.AboutScreen
-import com.hexo141.liquidglass.ui.AppScaffold
-import com.hexo141.liquidglass.ui.PairingScreen
-import com.hexo141.liquidglass.ui.ExploitChoice
-import com.hexo141.liquidglass.ui.SupportState
-import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -75,15 +69,6 @@ class MainActivity : AppCompatActivity() {
         /** How long the plain TCP connect may take, including the on-device authorisation prompt. */
         const val TCP_CONNECT_TIMEOUT_S = 45L
 
-        /**
-         * Reference width of the layout in dp. Bigger number = smaller UI (more dp per screen):
-         * 411 is a Pixel/OnePlus phone, 460 draws everything about 11% smaller.
-         */
-        const val DESIGN_WIDTH_DP = 460f
-
-        /** Density clamps, so neither a tiny nor a huge panel produces an unusable layout. */
-        const val MIN_UI_SCALE = 1.0f
-        const val MAX_UI_SCALE = 3.5f
         /**
          * Reference width of the layout in dp. Bigger number = smaller UI (more dp per screen):
          * 411 is a Pixel/OnePlus phone, 460 draws everything about 11% smaller.
